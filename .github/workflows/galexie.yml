@@ -2,7 +2,7 @@ name: Galexie
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     tags: ['galexie-v*']
   pull_request:
 
