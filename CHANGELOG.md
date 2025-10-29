@@ -1,22 +1,28 @@
 # Changelog
-This repository adheres to [Semantic Versioning](http://semver.org/).
 
-This monorepo contains a number of projects, individually versioned and released. Please consult the relevant changelog:
+All notable changes to this project will be documented in this
+file. This project adheres to [Semantic Versioning](http://semver.org/).
 
-* `horizon server` ([changelog](./services/horizon/CHANGELOG.md))
-* `horizonclient` ([changelog](./clients/horizonclient/CHANGELOG.md))
-* `txnbuild` ([changelog](./txnbuild/CHANGELOG.md))
-* `bridge` ([changelog](./services/bridge/CHANGELOG.md))
-* `compliance` ([changelog](./services/compliance/CHANGELOG.md))
-* `federation` ([changelog](./services/federation/CHANGELOG.md))
-* `ticker` ([changelog](./services/ticker/CHANGELOG.md))
-* `keystore` (experimental) ([changelog](./services/keystore/CHANGELOG.md))
-* `stellar-vanity-gen` ([changelog](./tools/stellar-vanity-gen/CHANGELOG.md))
-* `stellar-sign` ([changelog](./tools/stellar-sign/CHANGELOG.md))
-* `stellar-archivist` ([changelog](./tools/stellar-archivist/CHANGELOG.md))
-* `stellar-hd-wallet` ([changelog](./tools/stellar-hd-wallet/CHANGELOG.md))
+## Pending
 
-If a project is pre-v1.0, breaking changes may happen for minor version
-bumps.  A breaking change will be clearly notified in the corresponding changelog.
+### New Features
+ - Added new sub-command `load-test` to perform load testing on Galexie export - ([#5820](https://github.com/stellar/go/pull/5820)). It uses the (ingest/loadtest)[https://github.com/stellar/go/tree/master/ingest/loadtest] sdk tool which generates synthetic ledgers at runtime from a pre-built synthetic ledgers data file. You must create the synthetic ledgers data file first with (ingest/loadtest generator tool)[../horizon/internal/integration/generate_ledgers_test.go]. 
+   ```
+   ./galexie load-test --help
+   ```
 
-Official project releases may be found here: https://github.com/stellar/go/releases
+## [v23.0.0]
+
+### New Features
+ - Galexie can be configured to use S3 (or services which have an S3 compatible API) instead of GCS for storage ([#5748](https://github.com/stellar/go/pull/5748))
+
+### Breaking Changes
+⚠ This is a breaking change that requires a one-time update to your bucket. For detailed instructions, please see [UPGRADE.md](./UPGRADE.md).
+
+ - Galexie now complies with [SEP-0054](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0054.md) ([#5773](https://github.com/stellar/go/pull/5773))
+    - Ledger file extension changed from `.zstd` to `.zst` (standard Zstandard compression extension).
+    - Galexie will create a new .config.json manifest file in the data lake on its first run if one doesn't already exist.
+
+## [v1.0.0] 
+
+- 🎉 First release!
