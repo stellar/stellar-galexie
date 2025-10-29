@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	galexie "github.com/stellar/go/services/galexie/internal"
+	galexie "github.com/stellar/stellar-galexie/services/galexie/internal"
 )
 
 func main() {
