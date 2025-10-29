@@ -83,3 +83,11 @@ jobs:
 
       - name: Push to DockerHub
         run: make -C services/galexie docker-push
+  
+  complete:
+    name: complete
+    needs: integration-test
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Complete
+        run: echo "All tests have completed successfully"
