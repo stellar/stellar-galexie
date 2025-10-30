@@ -85,9 +85,9 @@ jobs:
         run: make -C services/galexie docker-push
   
   complete:
-    name: complete
-    needs: integration-test
+    if: always()
+    needs: [integration-test]
     runs-on: ubuntu-22.04
     steps:
-      - name: Complete
-        run: echo "All tests have completed successfully"
+    - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      run: exit 1
