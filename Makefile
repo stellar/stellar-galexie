@@ -11,8 +11,7 @@ docker-build:
     --build-arg GOFLAGS="-ldflags=-X=github.com/stellar/go/services/galexie/internal.version=$(VERSION)" \
 $(if $(STELLAR_CORE_VERSION), --build-arg STELLAR_CORE_VERSION=$(STELLAR_CORE_VERSION)) \
 	-f services/galexie/docker/Dockerfile \
-	-t $(DOCKER_IMAGE):$(VERSION) \
-	-t $(DOCKER_IMAGE):latest .
+	-t $(DOCKER_IMAGE):$(VERSION) .
 
 docker-clean:
 	$(SUDO) docker stop fake-gcs-server || true
@@ -42,6 +41,7 @@ docker-test-fake-gcs: docker-clean
 
 docker-push:
 	$(SUDO) docker push $(DOCKER_IMAGE):$(VERSION)
-ifneq ($(findstring -rc, $(VERSION)), -rc)
+
+docker-push-latest:
+	$(SUDO) docker tag $(DOCKER_IMAGE):$(VERSION) $(DOCKER_IMAGE):latest
 	$(SUDO) docker push $(DOCKER_IMAGE):latest
-endif
