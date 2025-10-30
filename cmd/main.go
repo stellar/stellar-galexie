@@ -1,4 +1,4 @@
-package galexie
+package cmd
 
 import (
 	"context"
@@ -9,21 +9,23 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stellar/go/support/strutils"
+
+	"github.com/stellar/stellar-galexie/internal"
 )
 
 var (
-	galexieCmdRunner = func(runtimeSettings RuntimeSettings) error {
-		app := NewApp()
+	galexieCmdRunner = func(runtimeSettings galexie.RuntimeSettings) error {
+		app := galexie.NewApp()
 		return app.Run(runtimeSettings)
 	}
 )
 
 func Execute() error {
-	rootCmd := defineCommands()
+	rootCmd := DefineCommands()
 	return rootCmd.Execute()
 }
 
-func defineCommands() *cobra.Command {
+func DefineCommands() *cobra.Command {
 	var rootCmd = &cobra.Command{
 		Use:   "galexie",
 		Short: "Export Stellar network ledger data to a remote data store",
@@ -42,7 +44,7 @@ func defineCommands() *cobra.Command {
 				cmd.PersistentFlags().Lookup("end"),
 				cmd.PersistentFlags().Lookup("config-file"),
 			)
-			settings.Mode = ScanFill
+			settings.Mode = galexie.ScanFill
 			settings.Ctx = cmd.Context()
 			if settings.Ctx == nil {
 				settings.Ctx = context.Background()
@@ -59,7 +61,7 @@ func defineCommands() *cobra.Command {
 				cmd.PersistentFlags().Lookup("end"),
 				cmd.PersistentFlags().Lookup("config-file"),
 			)
-			settings.Mode = Append
+			settings.Mode = galexie.Append
 			settings.Ctx = cmd.Context()
 			if settings.Ctx == nil {
 				settings.Ctx = context.Background()
@@ -77,7 +79,7 @@ func defineCommands() *cobra.Command {
 				cmd.PersistentFlags().Lookup("end"),
 				cmd.PersistentFlags().Lookup("config-file"),
 			)
-			settings.Mode = Replace
+			settings.Mode = galexie.Replace
 			settings.Ctx = cmd.Context()
 			if settings.Ctx == nil {
 				settings.Ctx = context.Background()
@@ -100,7 +102,7 @@ func defineCommands() *cobra.Command {
 				cmd.PersistentFlags().Lookup("close-duration"),
 				cmd.PersistentFlags().Lookup("config-file"),
 			)
-			settings.Mode = LoadTest
+			settings.Mode = galexie.LoadTest
 			settings.Ctx = cmd.Context()
 			if settings.Ctx == nil {
 				settings.Ctx = context.Background()
@@ -143,8 +145,8 @@ func defineCommands() *cobra.Command {
 	return rootCmd
 }
 
-func bindCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, configFileFlag *pflag.Flag) RuntimeSettings {
-	settings := RuntimeSettings{}
+func bindCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, configFileFlag *pflag.Flag) galexie.RuntimeSettings {
+	settings := galexie.RuntimeSettings{}
 
 	viper.BindPFlag(startFlag.Name, startFlag)
 	viper.BindEnv(startFlag.Name, strutils.KebabToConstantCase(startFlag.Name))
@@ -161,8 +163,8 @@ func bindCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, configFileFla
 	return settings
 }
 
-func bindLoadTestCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, mergeFlag *pflag.Flag, ledgersPathFlag *pflag.Flag, closeDurationFlag *pflag.Flag, configFileFlag *pflag.Flag) RuntimeSettings {
-	settings := RuntimeSettings{}
+func bindLoadTestCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, mergeFlag *pflag.Flag, ledgersPathFlag *pflag.Flag, closeDurationFlag *pflag.Flag, configFileFlag *pflag.Flag) galexie.RuntimeSettings {
+	settings := galexie.RuntimeSettings{}
 
 	viper.BindPFlag(startFlag.Name, startFlag)
 	viper.BindEnv(startFlag.Name, strutils.KebabToConstantCase(startFlag.Name))

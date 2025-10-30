@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	galexie "github.com/stellar/stellar-galexie/services/galexie/internal"
+	"github.com/stellar/stellar-galexie/cmd"
 )
 
 func main() {
-	err := galexie.Execute()
+	err := cmd.Execute()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

@@ -1,4 +1,4 @@
-package galexie
+package cmd
 
 import (
 	"bytes"
@@ -9,16 +9,18 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+
+	galexie "github.com/stellar/stellar-galexie/internal"
 )
 
 func TestFlagsOutput(t *testing.T) {
-	var testResultSettings RuntimeSettings
-	appRunnerSuccess := func(runtimeSettings RuntimeSettings) error {
+	var testResultSettings galexie.RuntimeSettings
+	appRunnerSuccess := func(runtimeSettings galexie.RuntimeSettings) error {
 		testResultSettings = runtimeSettings
 		return nil
 	}
 
-	appRunnerError := func(runtimeSettings RuntimeSettings) error {
+	appRunnerError := func(runtimeSettings galexie.RuntimeSettings) error {
 		return errors.New("test error")
 	}
 
@@ -28,8 +30,8 @@ func TestFlagsOutput(t *testing.T) {
 		name              string
 		commandArgs       []string
 		expectedErrOutput string
-		appRunner         func(runtimeSettings RuntimeSettings) error
-		expectedSettings  RuntimeSettings
+		appRunner         func(runtimeSettings galexie.RuntimeSettings) error
+		expectedSettings  galexie.RuntimeSettings
 	}{
 		{
 			name:              "no sub-command",
@@ -41,11 +43,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"append", "--start", "4", "--end", "5", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    4,
 				EndLedger:      5,
 				ConfigFilePath: "myfile",
-				Mode:           Append,
+				Mode:           galexie.Append,
 				Ctx:            ctx,
 			},
 		},
@@ -54,11 +56,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"append", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    0,
 				EndLedger:      0,
 				ConfigFilePath: "myfile",
-				Mode:           Append,
+				Mode:           galexie.Append,
 				Ctx:            ctx,
 			},
 		},
@@ -73,11 +75,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"scan-and-fill", "--start", "4", "--end", "5", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    4,
 				EndLedger:      5,
 				ConfigFilePath: "myfile",
-				Mode:           ScanFill,
+				Mode:           galexie.ScanFill,
 				Ctx:            ctx,
 			},
 		},
@@ -86,11 +88,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"scan-and-fill", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    0,
 				EndLedger:      0,
 				ConfigFilePath: "myfile",
-				Mode:           ScanFill,
+				Mode:           galexie.ScanFill,
 				Ctx:            ctx,
 			},
 		},
@@ -105,11 +107,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"replace", "--start", "10", "--end", "20", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    10,
 				EndLedger:      20,
 				ConfigFilePath: "myfile",
-				Mode:           Replace,
+				Mode:           galexie.Replace,
 				Ctx:            ctx,
 			},
 		},
@@ -118,11 +120,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"replace", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:    0,
 				EndLedger:      0,
 				ConfigFilePath: "myfile",
-				Mode:           Replace,
+				Mode:           galexie.Replace,
 				Ctx:            ctx,
 			},
 		},
@@ -137,11 +139,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"load-test", "--start", "4", "--end", "5", "--merge", "--ledgers-path", "ledgers.xdr", "--close-duration", "3.5", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:           4,
 				EndLedger:             5,
 				ConfigFilePath:        "myfile",
-				Mode:                  LoadTest,
+				Mode:                  galexie.LoadTest,
 				Ctx:                   ctx,
 				LoadTestMerge:         true,
 				LoadTestLedgersPath:   "ledgers.xdr",
@@ -153,11 +155,11 @@ func TestFlagsOutput(t *testing.T) {
 			commandArgs:       []string{"load-test", "--start", "4", "--end", "5", "--ledgers-path", "ledgers.xdr", "--config-file", "myfile"},
 			expectedErrOutput: "",
 			appRunner:         appRunnerSuccess,
-			expectedSettings: RuntimeSettings{
+			expectedSettings: galexie.RuntimeSettings{
 				StartLedger:           4,
 				EndLedger:             5,
 				ConfigFilePath:        "myfile",
-				Mode:                  LoadTest,
+				Mode:                  galexie.LoadTest,
 				Ctx:                   ctx,
 				LoadTestMerge:         false,
 				LoadTestLedgersPath:   "ledgers.xdr",
@@ -175,7 +177,7 @@ func TestFlagsOutput(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			// mock galexie's cmd runner to be this test's mock routine instead of real app
 			galexieCmdRunner = testCase.appRunner
-			rootCmd := defineCommands()
+			rootCmd := DefineCommands()
 			rootCmd.SetArgs(testCase.commandArgs)
 			var errWriter io.Writer = &bytes.Buffer{}
 			var outWriter io.Writer = &bytes.Buffer{}

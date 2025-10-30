@@ -1,4 +1,4 @@
-package galexie
+package test
 
 import (
 	"bytes"
@@ -32,6 +32,9 @@ import (
 	"github.com/stellar/go/support/datastore"
 	"github.com/stellar/go/support/storage"
 	"github.com/stellar/go/xdr"
+
+	"github.com/stellar/stellar-galexie/cmd"
+	galexie "github.com/stellar/stellar-galexie/internal"
 )
 
 const (
@@ -42,7 +45,7 @@ const (
 	// tests then refer to ledger sequences only up to this, therefore
 	// don't have to do complex waiting within test for a sequence to exist.
 	waitForCoreLedgerSequence = 16
-	configTemplate            = "test/integration_config_template.toml"
+	configTemplate            = "data/integration_config_template.toml"
 )
 
 // TestGalexieGCSTestSuite runs tests with GCS backend
@@ -80,14 +83,14 @@ type GalexieTestSuite struct {
 	dockerCli             *client.Client
 	gcsServer             *fakestorage.Server
 	finishedSetup         bool
-	config                Config
+	config                galexie.Config
 	storageType           string // "GCS" or "S3"
 }
 
 func (s *GalexieTestSuite) TestScanAndFill() {
 	require := s.Require()
 
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 
 	rootCmd.SetArgs([]string{"scan-and-fill", "--start", "4", "--end", "5", "--config-file", s.tempConfigFile})
 	var errWriter bytes.Buffer
@@ -134,7 +137,7 @@ func (s *GalexieTestSuite) TestScanAndFill() {
 func (s *GalexieTestSuite) TesReplace() {
 	require := s.Require()
 
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 
 	rootCmd.SetArgs([]string{"scan-and-fill", "--start", "4", "--end", "5", "--config-file", s.tempConfigFile})
 	var errWriter bytes.Buffer
@@ -162,7 +165,7 @@ func (s *GalexieTestSuite) TesReplace() {
 	time.Sleep(1 * time.Second)
 
 	// now run replace on an overlapping range, it will overwrite existing ledgers
-	rootCmd = defineCommands()
+	rootCmd = cmd.DefineCommands()
 	rootCmd.SetArgs([]string{"replace", "--start", "4", "--end", "9", "--config-file", s.tempConfigFile})
 	errWriter.Reset()
 	rootCmd.SetErr(&errWriter)
@@ -186,7 +189,7 @@ func (s *GalexieTestSuite) TestAppend() {
 	require := s.Require()
 
 	// first populate ledgers 6-7
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 	rootCmd.SetArgs([]string{"scan-and-fill", "--start", "6", "--end", "7", "--config-file", s.tempConfigFile})
 	err := rootCmd.ExecuteContext(s.ctx)
 	require.NoError(err)
@@ -223,7 +226,7 @@ func (s *GalexieTestSuite) TestAppend() {
 func (s *GalexieTestSuite) TestAppendUnbounded() {
 	require := s.Require()
 
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 	rootCmd.SetArgs([]string{"append", "--start", "10", "--config-file", s.tempConfigFile})
 	var errWriter bytes.Buffer
 	var outWriter bytes.Buffer
@@ -278,7 +281,7 @@ func (s *GalexieTestSuite) TearDownTest() {
 func (s *GalexieTestSuite) TestIngestionLoadInvalidRange() {
 	require := s.Require()
 	ledgersFilePath := s.getLoadTestDataFile()
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 
 	// Set up the load-test command with required flags
 	rootCmd.SetArgs([]string{
@@ -298,7 +301,7 @@ func (s *GalexieTestSuite) TestIngestionLoadInvalidRange() {
 func (s *GalexieTestSuite) TestIngestionLoadBoundedCmd() {
 	require := s.Require()
 	ledgersFilePath := s.getLoadTestDataFile()
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 
 	// Set up the load-test command with required flags
 	rootCmd.SetArgs([]string{
@@ -368,7 +371,7 @@ func (s *GalexieTestSuite) TestIngestionLoadBoundedCmd() {
 
 	// now that the datastore has files,
 	// verify that load test mode correctly validates this as a non-empty error case
-	rootCmd = defineCommands()
+	rootCmd = cmd.DefineCommands()
 
 	rootCmd.SetArgs([]string{
 		"load-test",
@@ -386,7 +389,7 @@ func (s *GalexieTestSuite) TestIngestionLoadBoundedCmd() {
 func (s *GalexieTestSuite) TestIngestionLoadUnBoundedCmd() {
 	require := s.Require()
 	ledgersFilePath := s.getLoadTestDataFile()
-	rootCmd := defineCommands()
+	rootCmd := cmd.DefineCommands()
 
 	// Set up the load-test command with required flags
 	rootCmd.SetArgs([]string{
@@ -534,7 +537,7 @@ func (s *GalexieTestSuite) getLoadTestDataFile() string {
 	require := s.Require()
 	// this file of synthetic ledger data should be built ahead of time using services/horizon/internal/integration/generate_ledgers_test.go
 	// test will only be done for current protocol version which should be stamped on the filename.
-	datapath := filepath.Join("testdata", "load-test-ledgers-v23-standalone.xdr.zstd")
+	datapath := filepath.Join("data", "load-test-ledgers-v23-standalone.xdr.zstd")
 	require.FileExists(datapath, "Test ledgers file should exist")
 	return datapath
 }
