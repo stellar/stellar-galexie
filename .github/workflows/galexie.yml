@@ -72,7 +72,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
       - name: Build docker
-        run: make -C services/galexie docker-build
+        run: make docker-build
 
       # Push images
       - name: Login to DockerHub
@@ -82,7 +82,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push to DockerHub
-        run: make -C services/galexie docker-push
+        run: make docker-push
   
   complete:
     if: always()
