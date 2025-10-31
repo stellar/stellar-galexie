@@ -73,7 +73,7 @@ jobs:
         with:
           ref: ${{ github.ref }}
       - name: Build docker
-        run: make -C services/galexie docker-build
+        run: make docker-build
 
       # Push images
       - name: Login to DockerHub
@@ -83,11 +83,11 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push version tag to DockerHub
-        run: make -C services/galexie docker-push
+        run: make docker-push
 
       - name: Push latest tag to DockerHub
         if: ${{ (github.ref_type == 'tag') && (! contains(github.ref, '-rc')) }}
-        run: make -C services/galexie docker-push-latest
+        run: make docker-push-latest
   
   complete:
     if: always()
