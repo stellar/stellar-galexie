@@ -58,13 +58,14 @@ jobs:
   publish-docker:
     name: push docker image
     needs: integration-test
-    if: github.ref_type == 'tag'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     env:
       # this is the version of core to be bundled with galaxie on image
       STELLAR_CORE_VERSION: 24.0.0-2802.0d7b4345d.focal
     steps:
       - name: Set VERSION
+        if: github.ref_type == 'tag'
         run: |
           echo "VERSION=${GITHUB_REF_NAME#galexie-v}" >> $GITHUB_ENV
 
@@ -76,13 +77,17 @@ jobs:
 
       # Push images
       - name: Login to DockerHub
-        uses: docker/login-action@bb984efc561711aaa26e433c32c3521176eae55b
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push to DockerHub
+      - name: Push version tag to DockerHub
         run: make docker-push
+
+      - name: Push latest tag to DockerHub
+        if: ${{ (github.ref_type == 'tag') && (! contains(github.ref, '-rc')) }}
+        run: make docker-push-latest
   
   complete:
     if: always()

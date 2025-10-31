@@ -31,4 +31,3 @@ COPY --from=builder /go/bin/galexie /usr/bin/galexie
 ENTRYPOINT ["/usr/bin/galexie"]
 
 CMD ["--help"]
-
