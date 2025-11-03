@@ -1,11 +1,6 @@
 .DS_Store
-/vendor
-/dist
-/local-archive
-/services/horizon/captive-core
-/services/horizon/horizon
-/services/horizon/stellar-horizon
 **bucket-cache/
+captive-core/
 .vscode
 .idea
 debug
@@ -21,4 +16,3 @@ debug
 *.db
 *.conf
 *.lock
-.proto_checksums
