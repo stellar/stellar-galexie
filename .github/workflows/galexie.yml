@@ -14,7 +14,7 @@ jobs:
       matrix:
         storage_type: [ GCS, S3 ]
     env:
-      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 24.0.0-2802.0d7b4345d.focal
+      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 24.1.0-2804.rc1.5a7035d49.focal
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
       # this pins to a version of quickstart:testing that has the same version as GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       # this is the version of core to be bundled with galaxie on image
-      STELLAR_CORE_VERSION: 24.0.0-2802.0d7b4345d.focal
+      STELLAR_CORE_VERSION: 24.1.0-2804.rc1.5a7035d49.focal
     steps:
       - name: Set VERSION
         if: github.ref_type == 'tag'
