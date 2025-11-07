@@ -3,6 +3,7 @@ SUDO := $(shell docker version >/dev/null 2>&1 || echo "sudo")
 # https://github.com/opencontainers/image-spec/blob/master/annotations.md
 BUILD_DATE := $(shell date -u +%FT%TZ)
 VERSION ?= $(shell git rev-parse --short HEAD)
+RELEASE_VERSION ?= $(shell git describe --exact-match --tags)
 DOCKER_IMAGE := stellar/stellar-galexie
 
 docker-build:
@@ -38,8 +39,15 @@ docker-test-fake-gcs: docker-clean
 
 	$(MAKE) docker-clean
 
+docker-pull:
+	$(SUDO) docker pull $(DOCKER_IMAGE):$(VERSION)
+
 docker-push:
 	$(SUDO) docker push $(DOCKER_IMAGE):$(VERSION)
+
+docker-push-release:
+	$(SUDO) docker tag $(DOCKER_IMAGE):$(VERSION) $(DOCKER_IMAGE):$(RELEASE_VERSION)
+	$(SUDO) docker push $(DOCKER_IMAGE):$(RELEASE_VERSION)
 
 docker-push-latest:
 	$(SUDO) docker tag $(DOCKER_IMAGE):$(VERSION) $(DOCKER_IMAGE):latest
