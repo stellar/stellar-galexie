@@ -35,8 +35,12 @@ func TestNewScanner_NormalizesPartitionSize(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			sc, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: c.lpf}, 3, c.inSize, nil)
-			require.NoError(t, err)
-			require.Equal(t, c.wantSize, sc.partitionSize)
+			if c.inSize == 0 {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, c.wantSize, sc.partitionSize)
+			}
 		})
 	}
 }

@@ -13,18 +13,18 @@ import (
 // Report represents the aggregated outcome of a full ledger scan.
 // It summarizes all gaps, counts, and the overall ledger range discovered.
 type Report struct {
-	Gaps         []Gap  // All missing ledger ranges found across partitions.
-	TotalFound   uint32 // Total number of ledgers successfully found.
-	TotalMissing uint64 // Total number of missing ledgers across all gaps.
-	Min          uint32 // Lowest ledger sequence number observed.
-	Max          uint32 // Highest ledger sequence number observed.
+	Gaps         []Gap  `json:"gaps,omitempty"` // All missing ledger ranges found across partitions.
+	TotalFound   uint32 `json:"total_found"`    // Total number of ledgers successfully found.
+	TotalMissing uint64 `json:"total_missing"`  // Total number of missing ledgers across all gaps.
+	Min          uint32 `json:"min"`            // Lowest ledger sequence number observed.
+	Max          uint32 `json:"max"`            // Highest ledger sequence number observed.
 }
 
 // Gap represents a contiguous range of missing ledgers detected
 // between existing data ranges.
 type Gap struct {
-	Start uint32 // First missing ledger in the range.
-	End   uint32 // Last missing ledger in the range.
+	Start uint32 `json:"start"` // First missing ledger in the range.
+	End   uint32 `json:"end"`   // Last missing ledger in the range.
 }
 
 // Partition defines a contiguous range of ledger sequences
@@ -68,7 +68,20 @@ func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
 	numWorkers uint32, partitionSize uint32, logger *log.Entry) (*Scanner, error) {
 	lpf := schema.LedgersPerFile
 	if lpf == 0 {
-		return &Scanner{}, fmt.Errorf("invalid ledgersPerFile [%d]: must be greater than zero", lpf)
+		return nil, fmt.Errorf("invalid ledgersPerFile [%d]: must be greater than zero", lpf)
+	}
+
+	if partitionSize == 0 {
+		return nil, fmt.Errorf("partitionSize must be > 0")
+	}
+
+	if numWorkers == 0 {
+		return nil, fmt.Errorf("numWorkers must be > 0")
+	}
+
+	// Default a nil logger to the package default
+	if logger == nil {
+		logger = log.DefaultLogger
 	}
 
 	// Calculate the effective partition size
@@ -153,6 +166,11 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	if from > to {
 		return Report{}, fmt.Errorf("invalid range")
 	}
+
+	if s.partitionSize == 0 {
+		return Report{}, fmt.Errorf("partitionSize must be > 0")
+	}
+
 	// Compute scan partitions using normalized partition size.
 	parts := computePartitions(from, to, s.partitionSize)
 
