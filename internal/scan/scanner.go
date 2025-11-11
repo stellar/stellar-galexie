@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -173,6 +174,9 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 
 	// Compute scan partitions using normalized partition size.
 	parts := computePartitions(from, to, s.partitionSize)
+	if len(parts) > math.MaxUint32 {
+		return Report{}, fmt.Errorf("too many partitions")
+	}
 
 	// Use at most one worker per partition.
 	workers := s.numWorkers
