@@ -45,15 +45,11 @@ func TestLedgerKeyIter_Pagination(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{}, nil).Maybe()
 
-	it := &LedgerKeyIter{DS: ds}
-	var all []LedgerObject
-	for {
-		objs, err := it.Next(ctx)
+	it := &LedgerFileIter{DS: ds}
+	var all []LedgerFile
+	for cur, err := range it.Next(ctx) {
 		require.NoError(t, err)
-		if len(objs) == 0 {
-			break
-		}
-		all = append(all, objs...)
+		all = append(all, cur)
 	}
 
 	require.Len(t, all, 3)
@@ -114,11 +110,14 @@ func TestLedgerKeyIter_StopAfter(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{}, nil).Maybe()
 
-	it := &LedgerKeyIter{DS: ds, StopAfter: "00000014--11-20.xdr.zst"} // stop once > this
-	objs, err := it.Next(ctx)
-	require.NoError(t, err)
+	it := &LedgerFileIter{DS: ds, StopAfter: "00000014--11-20.xdr.zst"} // stop once > this
+	var all []LedgerFile
+	for cur, err := range it.Next(ctx) {
+		require.NoError(t, err)
+		all = append(all, cur)
+	}
 	// Should include entries <= StopAfter
-	require.Len(t, objs, 2)
+	require.Len(t, all, 2)
 
 	ds.AssertExpectations(t)
 }

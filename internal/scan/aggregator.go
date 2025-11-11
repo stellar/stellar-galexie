@@ -19,7 +19,7 @@ func newAggregator(logger *log.Entry) *aggregator {
 	return &aggregator{
 		logger:   logger,
 		minFound: ^uint32(0),
-		gaps:     make([]Gap, 0, 1024),
+		gaps:     make([]Gap, 0, 1024), // reasonable default
 	}
 }
 
@@ -66,6 +66,10 @@ func (a *aggregator) finalize() Report {
 			"found": a.totalFound,
 			"gaps":  len(finalGaps),
 		}).Info("Report generation complete")
+	}
+	if !a.hasData {
+		a.minFound = 0
+		a.maxFound = 0
 	}
 
 	return Report{

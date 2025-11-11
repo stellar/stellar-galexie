@@ -49,9 +49,7 @@ func TestAggregator_Empty_ReturnsZeroReport(t *testing.T) {
 	assert.Equal(t, Report{}, rep)
 }
 
-func TestAggregator_gapsOnly_NoData_MinMaxSentinels(t *testing.T) {
-	// NOTE: With only gaps and no found data, aggregator.minFound remains ^uint32(0).
-	// This test captures current behavior so refactors won’t change it accidentally.
+func TestAggregator_gapsOnly_NoData_MinMax(t *testing.T) {
 	a := newAggregator(nil)
 	a.add(Result{gaps: gaps([2]uint32{5, 7})}) // count==0, no low/high
 
@@ -60,9 +58,7 @@ func TestAggregator_gapsOnly_NoData_MinMaxSentinels(t *testing.T) {
 	assert.Equal(t, Gap{Start: 5, End: 7}, rep.Gaps[0])
 	assert.Equal(t, uint64(3), rep.TotalMissing)
 	assert.Equal(t, uint32(0), rep.TotalFound)
-
-	// Min/Max reflect aggregator defaults since hasData is false.
-	assert.Equal(t, ^uint32(0), rep.Min)
+	assert.Equal(t, uint32(0), rep.Min)
 	assert.Equal(t, uint32(0), rep.Max)
 }
 

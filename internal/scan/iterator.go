@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"iter"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -12,55 +13,72 @@ import (
 
 var ledgerFilenameRe = regexp.MustCompile(`^[0-9A-F]{8}--[0-9]+(?:-[0-9]+)?\.xdr\.[A-Za-z0-9._-]+$`)
 
-type LedgerObject struct {
+type LedgerFile struct {
 	key  string
 	high uint32
 	low  uint32
 }
 
-type LedgerKeyIter struct {
+type LedgerFileIter struct {
 	DS         datastore.DataStore
 	StartAfter string // upper bound: iteration starts *after* this key
 	StopAfter  string // lower bound: stop once we reach or go below this key
-	reachedEnd bool
 }
 
-func (it *LedgerKeyIter) Next(ctx context.Context) ([]LedgerObject, error) {
-	if it.reachedEnd {
-		return nil, nil
-	}
+// Next returns an iterator (iter.Seq2) that lazily yields ledger objects from the
+// underlying datastore in descending order.
+//
+// Each iteration step queries the datastore for the next batch of file paths
+// using the current StartAfter marker. For every valid ledger file, it parses
+// the corresponding ledger range and yields a LedgerObject along with any
+// error encountered.
+//
+// The iterator stops naturally when no more files are available, or early if
+// the provided context is canceled or an error occurs. In the case of an error,
+// the yielded error will be non-nil and iteration will terminate.
+func (it *LedgerFileIter) Next(ctx context.Context) iter.Seq2[LedgerFile, error] {
+	return func(yield func(LedgerFile, error) bool) {
+		startAfter := it.StartAfter
 
-	opts := datastore.ListFileOptions{StartAfter: it.StartAfter}
-	paths, err := it.DS.ListFilePaths(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	if len(paths) == 0 {
-		return nil, nil
-	}
+		for {
+			if err := ctx.Err(); err != nil {
+				yield(LedgerFile{}, err)
+				return
+			}
 
-	it.StartAfter = paths[len(paths)-1]
+			paths, err := it.DS.ListFilePaths(ctx, datastore.ListFileOptions{StartAfter: startAfter, Limit: 2})
+			if err != nil {
+				yield(LedgerFile{}, err)
+				return
+			}
+			if len(paths) == 0 {
+				return
+			}
 
-	objs := make([]LedgerObject, 0, len(paths))
-	for _, p := range paths {
-		base := filepath.Base(p)
-		if !ledgerFilenameRe.MatchString(base) {
-			continue
+			startAfter = paths[len(paths)-1]
+
+			for _, p := range paths {
+				if it.StopAfter != "" && p > it.StopAfter {
+					return
+				}
+
+				base := filepath.Base(p)
+				if !ledgerFilenameRe.MatchString(base) {
+					continue
+				}
+
+				low, high, err := parseRangeFromFilename(base)
+				if err != nil {
+					yield(LedgerFile{}, fmt.Errorf("parse ledger range for %s: %w", p, err))
+					return
+				}
+
+				if !yield(LedgerFile{key: p, low: low, high: high}, nil) {
+					return
+				}
+			}
 		}
-
-		if it.StopAfter != "" && p > it.StopAfter {
-			it.reachedEnd = true
-			break
-		}
-
-		low, high, err := parseRangeFromFilename(base)
-		if err != nil {
-			return nil, fmt.Errorf("parse ledger range for %s: %w", p, err)
-		}
-
-		objs = append(objs, LedgerObject{key: p, low: low, high: high})
 	}
-	return objs, nil
 }
 
 var keyRangeRE = regexp.MustCompile(`--(\d+)(?:-(\d+))?\.xdr\.`)

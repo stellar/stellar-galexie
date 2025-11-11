@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/stellar/go/support/datastore"
 )
@@ -16,56 +17,60 @@ func scanPartition(
 ) (Result, error) {
 	res := Result{gaps: make([]Gap, 0)}
 
-	it := &LedgerKeyIter{
+	// StartAfter normally uses (high+1); if high==MaxUint32, leave empty to mean "no upper bound".
+	startAfter := ""
+	if partition.high != math.MaxUint32 {
+		startAfter = schema.GetObjectKeyFromSequenceNumber(partition.high + 1)
+	}
+
+	it := &LedgerFileIter{
 		DS:         ds,
-		StartAfter: schema.GetObjectKeyFromSequenceNumber(partition.high + 1),
+		StartAfter: startAfter, // empty => start from the highest possible key
 		StopAfter:  schema.GetObjectKeyFromSequenceNumber(partition.low),
 	}
 
-	for {
+	for cur, err := range it.Next(ctx) {
+		if err != nil {
+			return res, err
+		}
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
 
-		keys, err := it.Next(ctx)
-		if err != nil {
-			return res, err
-		}
-		if len(keys) == 0 {
-			break
+		if cur.high < cur.low {
+			return res, fmt.Errorf("invalid range: %d-%d", cur.low, cur.high)
 		}
 
-		for _, cur := range keys {
-			if err := ctx.Err(); err != nil {
-				return res, err
+		if res.count == 0 {
+			// First file: set high watermark and check top boundary gap.
+			res.high = cur.high
+			if cur.high != math.MaxUint32 && cur.high < partition.high {
+				res.gaps = append(res.gaps, Gap{
+					Start: cur.high + 1,
+					End:   partition.high,
+				})
 			}
-
-			if res.count == 0 {
-				// First file: set high watermark and check top boundary gap.
-				res.high = cur.high
-				if cur.high < partition.high {
-					res.gaps = append(res.gaps, Gap{
-						Start: cur.high + 1,
-						End:   partition.high,
-					})
-				}
-			} else {
-				// Internal gap
-				if res.low > 0 && cur.high+1 < res.low {
-					res.gaps = append(res.gaps, Gap{
-						Start: cur.high + 1,
-						End:   res.low - 1,
-					})
-				}
-			}
-
-			// Count and advance low watermark.
-			if cur.high < cur.low {
-				return res, fmt.Errorf("invalid range: %d-%d", cur.low, cur.high)
-			}
-			res.count += cur.high - cur.low + 1
-			res.low = cur.low
+		} else if res.low > 0 && cur.high != math.MaxUint32 && cur.high+1 < res.low {
+			// Internal gap: guard (+1)
+			res.gaps = append(res.gaps, Gap{
+				Start: cur.high + 1,
+				End:   res.low - 1,
+			})
 		}
+
+		// Avoid uint32 overflow
+		delta64 := uint64(cur.high) - uint64(cur.low) + 1
+		if delta64 > uint64(math.MaxUint32) {
+			return res, fmt.Errorf("delta overflow: range %d-%d spans %d ledgers (> uint32 max)", cur.low, cur.high, delta64)
+		}
+
+		sum64 := uint64(res.count) + delta64
+		if sum64 > uint64(math.MaxUint32) {
+			return res, fmt.Errorf("count overflow: %d + %d exceeds uint32 max", res.count, delta64)
+		}
+		// Count and advance low watermark.
+		res.count = uint32(sum64)
+		res.low = cur.low
 	}
 
 	// Final boundary reconciliation.
