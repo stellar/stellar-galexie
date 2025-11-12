@@ -3,7 +3,6 @@ package scan
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync"
 	"time"
 
@@ -174,9 +173,6 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 
 	// Compute scan partitions using normalized partition size.
 	parts := computePartitions(from, to, s.partitionSize)
-	if len(parts) > math.MaxUint32 {
-		return Report{}, fmt.Errorf("too many partitions")
-	}
 
 	// Use at most one worker per partition.
 	workers := s.numWorkers
@@ -244,20 +240,24 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 }
 
 func computePartitions(from, to, partitionSize uint32) []Partition {
-	capacity := (to-from)/partitionSize + 1
+	total := uint64(to) - uint64(from) + 1
+	capacity := int((total + uint64(partitionSize) - 1) / uint64(partitionSize))
 	partitions := make([]Partition, 0, capacity)
 
 	for low := from; low <= to; {
-		// Calculate the end of the partition
-		high := low + partitionSize - 1
-
-		// Truncate if it goes past the overall 'to' boundary
-		if high > to {
+		high64 := uint64(low) + uint64(partitionSize) - 1
+		var high uint32
+		if high64 >= uint64(to) {
 			high = to
+		} else {
+			high = uint32(high64)
 		}
 
-		//	low = max(2, low)
 		partitions = append(partitions, Partition{low: low, high: high})
+		if high == to {
+			break
+		}
+
 		low = high + 1
 	}
 	return partitions
