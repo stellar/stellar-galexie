@@ -10,7 +10,7 @@ RUN go mod download
 COPY . ./
 
 ARG GOFLAGS
-RUN go install github.com/stellar/go/services/galexie
+RUN go install ./...
 
 FROM ubuntu:22.04
 ARG STELLAR_CORE_VERSION
@@ -26,8 +26,8 @@ RUN echo "deb https://apt.stellar.org focal unstable" >/etc/apt/sources.list.d/S
 RUN apt-get update && apt-get install -y stellar-core=${STELLAR_CORE_VERSION}
 RUN apt-get clean
 
-COPY --from=builder /go/bin/galexie /usr/bin/galexie
+COPY --from=builder /go/bin/stellar-galexie /usr/bin/stellar-galexie
 
-ENTRYPOINT ["/usr/bin/galexie"]
+ENTRYPOINT ["/usr/bin/stellar-galexie"]
 
 CMD ["--help"]
