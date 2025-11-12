@@ -6,6 +6,7 @@ import (
 	"github.com/stellar/go/support/log"
 )
 
+// aggregator accumulates ledger scan results and merges contiguous gap ranges.
 type aggregator struct {
 	logger     *log.Entry
 	totalFound uint32
@@ -15,6 +16,9 @@ type aggregator struct {
 	gaps       []Gap
 }
 
+// newAggregator creates a new, non-thread-safe aggregator.
+// The caller is responsible for ensuring that only one goroutine calls Add()
+// or Finalize() on a given instance.
 func newAggregator(logger *log.Entry) *aggregator {
 	return &aggregator{
 		logger:   logger,

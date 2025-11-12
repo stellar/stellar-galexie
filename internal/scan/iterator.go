@@ -25,17 +25,16 @@ type LedgerFileIter struct {
 	StopAfter  string // lower bound: stop once we reach or go below this key
 }
 
-// Next returns an iterator (iter.Seq2) that lazily yields ledger objects from the
-// underlying datastore in descending order.
+// Next returns an iterator (iter.Seq2) that yields ledger objects in
+// descending ledger sequence order.
 //
-// Each iteration step queries the datastore for the next batch of file paths
-// using the current StartAfter marker. For every valid ledger file, it parses
-// the corresponding ledger range and yields a LedgerObject along with any
-// error encountered.
+// File paths are listed lexicographically ascending by the datastore, but
+// their embedded ledger numbers decrease, so iteration effectively walks
+// backward in ledger order.
 //
-// The iterator stops naturally when no more files are available, or early if
-// the provided context is canceled or an error occurs. In the case of an error,
-// the yielded error will be non-nil and iteration will terminate.
+// StartAfter is an exclusive lower bound; StopAfter is an inclusive upper
+// bound in lexicographic order. The iterator stops when no more files remain,
+// the context is canceled, or an error occurs.
 func (it *LedgerFileIter) Next(ctx context.Context) iter.Seq2[LedgerFile, error] {
 	return func(yield func(LedgerFile, error) bool) {
 		startAfter := it.StartAfter
@@ -46,7 +45,7 @@ func (it *LedgerFileIter) Next(ctx context.Context) iter.Seq2[LedgerFile, error]
 				return
 			}
 
-			paths, err := it.DS.ListFilePaths(ctx, datastore.ListFileOptions{StartAfter: startAfter, Limit: 2})
+			paths, err := it.DS.ListFilePaths(ctx, datastore.ListFileOptions{StartAfter: startAfter})
 			if err != nil {
 				yield(LedgerFile{}, err)
 				return
