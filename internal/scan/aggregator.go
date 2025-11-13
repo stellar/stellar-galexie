@@ -31,9 +31,7 @@ func (a *aggregator) add(res Result) {
 		return
 	}
 
-	if len(res.gaps) > 0 {
-		a.gaps = append(a.gaps, res.gaps...)
-	}
+	a.gaps = append(a.gaps, res.gaps...)
 	a.totalFound += res.count
 
 	if res.count > 0 {
