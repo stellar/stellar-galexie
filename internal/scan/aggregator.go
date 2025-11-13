@@ -23,7 +23,6 @@ func newAggregator(logger *log.Entry) *aggregator {
 	return &aggregator{
 		logger:   logger,
 		minFound: ^uint32(0),
-		gaps:     make([]Gap, 0, 1024), // reasonable default
 	}
 }
 
@@ -41,12 +40,8 @@ func (a *aggregator) add(res Result) {
 		if !a.hasData {
 			a.minFound, a.maxFound, a.hasData = res.low, res.high, true
 		} else {
-			if res.low < a.minFound {
-				a.minFound = res.low
-			}
-			if res.high > a.maxFound {
-				a.maxFound = res.high
-			}
+			a.minFound = min(res.low, a.minFound)
+			a.maxFound = max(res.high, a.maxFound)
 		}
 	}
 }
@@ -100,10 +95,9 @@ func sortAndMergeGaps(gaps []Gap) []Gap {
 		curEnd := uint64(current.End)
 		nextStart := uint64(next.Start)
 
-		if nextStart <= curEnd+1 { // overlap or contiguous
-			if next.End > current.End {
-				current.End = next.End
-			}
+		if nextStart <= curEnd+1 {
+			// overlap or contiguous
+			current.End = max(next.End, current.End)
 		} else {
 			merged = append(merged, current)
 			current = next

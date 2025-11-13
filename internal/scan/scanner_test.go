@@ -63,7 +63,10 @@ func TestComputePartitions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := computePartitions(c.from, c.to, c.size)
+			scanner, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 1}, 1, c.size, nil)
+			require.NoError(t, err)
+			got, err := scanner.computePartitions(c.from, c.to)
+			require.NoError(t, err)
 			require.Equal(t, c.want, got)
 		})
 	}

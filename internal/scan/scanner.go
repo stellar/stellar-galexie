@@ -72,11 +72,11 @@ func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
 	}
 
 	if partitionSize == 0 {
-		return nil, fmt.Errorf("partitionSize must be > 0")
+		return nil, fmt.Errorf("invalid partition size: must be greater than 0")
 	}
 
 	if numWorkers == 0 {
-		return nil, fmt.Errorf("numWorkers must be > 0")
+		return nil, fmt.Errorf("invalid worker count: must be at least 1")
 	}
 
 	// Default a nil logger to the package default
@@ -164,23 +164,19 @@ func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan Result,
 // provided context is canceled.
 func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	if from > to {
-		return Report{}, fmt.Errorf("invalid range")
-	}
-
-	if s.partitionSize == 0 {
-		return Report{}, fmt.Errorf("partitionSize must be > 0")
+		return Report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
 	}
 
 	// Compute scan partitions using normalized partition size.
-	parts := computePartitions(from, to, s.partitionSize)
+	parts, err := s.computePartitions(from, to)
+	if err != nil {
+		return Report{}, fmt.Errorf("failed to compute partitions for range [%d-%d]: %w", from, to, err)
+	}
 
 	// Use at most one worker per partition.
-	workers := s.numWorkers
-	if workers > uint32(len(parts)) {
-		workers = uint32(len(parts))
-	}
+	workers := min(s.numWorkers, uint32(len(parts)))
 	if workers == 0 {
-		return Report{}, fmt.Errorf("numWorkers must be >= 1")
+		return Report{}, fmt.Errorf("invalid worker count: must be at least 1")
 	}
 
 	scanCtx, cancel := context.WithCancel(ctx)
@@ -239,20 +235,18 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	}
 }
 
-func computePartitions(from, to, partitionSize uint32) []Partition {
+func (s *Scanner) computePartitions(from, to uint32) ([]Partition, error) {
+	if s.partitionSize == 0 {
+		return nil, fmt.Errorf("invalid partition size: must be greater than 0")
+	}
+
 	total := uint64(to) - uint64(from) + 1
-	capacity := int((total + uint64(partitionSize) - 1) / uint64(partitionSize))
+	capacity := int((total + uint64(s.partitionSize) - 1) / uint64(s.partitionSize))
 	partitions := make([]Partition, 0, capacity)
 
 	for low := from; low <= to; {
-		high64 := uint64(low) + uint64(partitionSize) - 1
-		var high uint32
-		if high64 >= uint64(to) {
-			high = to
-		} else {
-			high = uint32(high64)
-		}
-
+		high64 := uint64(low) + uint64(s.partitionSize) - 1
+		high := min(to, uint32(high64))
 		partitions = append(partitions, Partition{low: low, high: high})
 		if high == to {
 			break
@@ -260,5 +254,5 @@ func computePartitions(from, to, partitionSize uint32) []Partition {
 
 		low = high + 1
 	}
-	return partitions
+	return partitions, nil
 }
