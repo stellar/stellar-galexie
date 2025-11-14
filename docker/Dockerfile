@@ -1,6 +1,6 @@
 FROM golang:1.23-bookworm AS builder
 
-WORKDIR /go/src/github.com/stellar/go
+WORKDIR /go-galexie
 
 COPY go.mod ./
 COPY go.sum ./
