@@ -22,18 +22,10 @@ func scanPartition(
 	if partition.high != math.MaxUint32 {
 		startAfter = schema.GetObjectKeyFromSequenceNumber(partition.high + 1)
 	}
+	stopAfter := schema.GetObjectKeyFromSequenceNumber(partition.low)
 
-	it := &LedgerFileIter{
-		DS:         ds,
-		StartAfter: startAfter, // empty => start from the highest possible key
-		StopAfter:  schema.GetObjectKeyFromSequenceNumber(partition.low),
-	}
-
-	for cur, err := range it.Next(ctx) {
+	for cur, err := range LedgerFileIter(ctx, ds, startAfter, stopAfter) {
 		if err != nil {
-			return res, err
-		}
-		if err := ctx.Err(); err != nil {
 			return res, err
 		}
 

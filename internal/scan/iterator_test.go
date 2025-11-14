@@ -45,9 +45,8 @@ func TestLedgerKeyIter_Pagination(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{}, nil).Maybe()
 
-	it := &LedgerFileIter{DS: ds}
 	var all []LedgerFile
-	for cur, err := range it.Next(ctx) {
+	for cur, err := range LedgerFileIter(ctx, ds, "", "") {
 		require.NoError(t, err)
 		all = append(all, cur)
 	}
@@ -110,9 +109,9 @@ func TestLedgerKeyIter_StopAfter(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{}, nil).Maybe()
 
-	it := &LedgerFileIter{DS: ds, StopAfter: "00000014--11-20.xdr.zst"} // stop once > this
+	stopAfter := "00000014--11-20.xdr.zst" // stop once > this
 	var all []LedgerFile
-	for cur, err := range it.Next(ctx) {
+	for cur, err := range LedgerFileIter(ctx, ds, "", stopAfter) {
 		require.NoError(t, err)
 		all = append(all, cur)
 	}

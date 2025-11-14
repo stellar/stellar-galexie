@@ -21,8 +21,7 @@ type aggregator struct {
 // or Finalize() on a given instance.
 func newAggregator(logger *log.Entry) *aggregator {
 	return &aggregator{
-		logger:   logger,
-		minFound: ^uint32(0),
+		logger: logger,
 	}
 }
 
@@ -63,10 +62,6 @@ func (a *aggregator) finalize() Report {
 			"found": a.totalFound,
 			"gaps":  len(finalGaps),
 		}).Info("Report generation complete")
-	}
-	if !a.hasData {
-		a.minFound = 0
-		a.maxFound = 0
 	}
 
 	return Report{

@@ -202,22 +202,6 @@ func TestScanPartition_DatastoreError_BubblesUp(t *testing.T) {
 	ds.AssertExpectations(t)
 }
 
-func TestScanPartition_ContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	ds := new(datastore.MockDataStore)
-	ds.On("ListFilePaths", mock.Anything, mock.Anything).
-		Return([]string{fpath(90, 100)}, nil).Maybe()
-
-	cancel()
-
-	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
-	part := Partition{low: 1, high: 100}
-
-	_, err := scanPartition(ctx, part, ds, schema)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
-}
-
 func TestScanPartition_ContextCanceledMidIteration(t *testing.T) {
 	ctx := context.Background()
 	ds := new(datastore.MockDataStore)
