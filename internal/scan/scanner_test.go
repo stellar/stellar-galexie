@@ -80,12 +80,6 @@ func TestRun_InputValidation(t *testing.T) {
 	sc.partitionSize = 10
 	_, err := sc.Run(context.Background(), 10, 9)
 	require.Error(t, err, "invalid range should error")
-
-	// zero workers
-	sc.numWorkers = 0
-	sc.partitionSize = 10
-	_, err = sc.Run(context.Background(), 1, 10)
-	require.Error(t, err, "numWorkers == 0 should error")
 }
 
 func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {

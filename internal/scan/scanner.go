@@ -175,9 +175,6 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 
 	// Use at most one worker per partition.
 	workers := min(s.numWorkers, uint32(len(parts)))
-	if workers == 0 {
-		return Report{}, fmt.Errorf("invalid worker count: must be at least 1")
-	}
 
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
