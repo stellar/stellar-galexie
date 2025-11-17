@@ -44,6 +44,9 @@ func (a *aggregator) add(res Result) {
 }
 
 func (a *aggregator) finalize() Report {
+	// This should not occur in normal scans.
+	// This state only happens if all partition scans canceled
+	// before producing any results.
 	if !a.hasData && len(a.gaps) == 0 {
 		return Report{}
 	}

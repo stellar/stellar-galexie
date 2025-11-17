@@ -10,6 +10,7 @@ import (
 	"github.com/stellar/go/support/datastore"
 	"github.com/stellar/go/support/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +35,8 @@ func TestNewScanner_NormalizesPartitionSize(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			sc, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: c.lpf}, 3, c.inSize, nil)
+			sc, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: c.lpf},
+				3, c.inSize, log.DefaultLogger)
 			if c.inSize == 0 {
 				require.Error(t, err)
 			} else {
@@ -46,8 +48,30 @@ func TestNewScanner_NormalizesPartitionSize(t *testing.T) {
 }
 
 func TestNewScanner_InvalidLPF(t *testing.T) {
+	_, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 0},
+		1, 16, log.DefaultLogger)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid ledgersPerFile")
+}
+
+func TestNewScanner_InvalidWorkers(t *testing.T) {
+	_, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 1},
+		0, 16, log.DefaultLogger)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid worker count")
+}
+
+func TestNewScanner_InvalidPartitionSize(t *testing.T) {
+	_, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 1},
+		1, 0, log.DefaultLogger)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid partition size")
+}
+
+func TestNewScanner_NilLogger(t *testing.T) {
 	_, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 0}, 1, 16, nil)
-	require.Error(t, err, "LPF=0 must be rejected")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid logger")
 }
 
 func TestComputePartitions(t *testing.T) {
@@ -63,7 +87,8 @@ func TestComputePartitions(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			scanner, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 1}, 1, c.size, nil)
+			scanner, err := NewScanner(nil, datastore.DataStoreSchema{LedgersPerFile: 1},
+				1, c.size, log.DefaultLogger)
 			require.NoError(t, err)
 			got, err := scanner.computePartitions(c.from, c.to)
 			require.NoError(t, err)
@@ -73,22 +98,38 @@ func TestComputePartitions(t *testing.T) {
 }
 
 func TestRun_InputValidation(t *testing.T) {
-	sc := &Scanner{logger: log.DefaultLogger.WithField("t", "RunInput")}
-
+	sc := &Scanner{}
 	// from > to
 	sc.numWorkers = 1
 	sc.partitionSize = 10
 	_, err := sc.Run(context.Background(), 10, 9)
-	require.Error(t, err, "invalid range should error")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "invalid range")
+}
+
+func newMockScanner(t *testing.T, numWorkers, partitionSize uint32) *Scanner {
+	t.Helper()
+
+	ds := new(datastore.MockDataStore)
+	ds.On("ListFilePaths", mock.Anything, mock.Anything).
+		Return([]string{"00000000--1-10.xdr.zst"}, nil).Maybe()
+	ds.On("GetFileMetadata", mock.Anything, mock.Anything).
+		Return(map[string]string{"EndLedger": "25"}, nil).Maybe()
+
+	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
+	sc, err := NewScanner(ds, schema, numWorkers, partitionSize, log.DefaultLogger)
+	require.NoError(t, err)
+
+	// Teardown: verify all expectations were met.
+	t.Cleanup(func() {
+		ds.AssertExpectations(t)
+	})
+
+	return sc
 }
 
 func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {
-	// 1..25 with partitionSize=10 → [1–10], [11–20], [21–25]
-	sc := &Scanner{
-		numWorkers:    3,
-		partitionSize: 10,
-		logger:        log.DefaultLogger,
-	}
+	sc := newMockScanner(t, 3, 10)
 
 	var total atomic.Uint64
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
@@ -102,12 +143,46 @@ func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {
 	assert.Equal(t, uint64(25), total.Load())
 }
 
-func TestRun_FirstErrorCancelsOthers(t *testing.T) {
-	sc := &Scanner{
-		numWorkers:    4,
-		partitionSize: 10,
-		logger:        log.DefaultLogger,
+func TestScannerRun_ReturnsFirstErrorAndPartialReport(t *testing.T) {
+	ctx := context.Background()
+	sc := newMockScanner(t, 1, 10)
+
+	errPartition := fmt.Errorf("partition failed")
+
+	// Override scan to control behavior:
+	// - First partition [1-10]: success, count=10
+	// - Second partition [11-20]: fails with errPartition
+	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
+		switch {
+		case p.low == 1 && p.high == 10:
+			return Result{
+				gaps:  nil,
+				low:   1,
+				high:  10,
+				count: 10,
+				error: nil,
+			}, nil
+		case p.low == 11 && p.high == 20:
+			return Result{}, errPartition
+		default:
+			t.Fatalf("unexpected partition: %+v", p)
+			return Result{}, nil
+		}
 	}
+
+	report, gotErr := sc.Run(ctx, 1, 20)
+	require.Error(t, gotErr)
+	require.ErrorIs(t, gotErr, errPartition)
+
+	// We expect only the first partition's data to be aggregated.
+	assert.EqualValues(t, report.TotalFound, 10)
+	assert.EqualValues(t, report.Min, 1)
+	assert.EqualValues(t, report.Max, 10)
+	assert.Len(t, report.Gaps, 0)
+}
+
+func TestRun_FirstErrorCancelsOthers(t *testing.T) {
+	sc := newMockScanner(t, 4, 10)
 
 	var calls atomic.Int32
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
@@ -121,16 +196,12 @@ func TestRun_FirstErrorCancelsOthers(t *testing.T) {
 
 	_, err := sc.Run(context.Background(), 1, 100)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	assert.ErrorIs(t, err, assert.AnError)
 	assert.GreaterOrEqual(t, calls.Load(), int32(1))
 }
 
 func TestRun_ExternalCancelBeforeStart(t *testing.T) {
-	sc := &Scanner{
-		numWorkers:    8,
-		partitionSize: 10,
-		logger:        log.DefaultLogger,
-	}
+	sc := newMockScanner(t, 8, 10)
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
 		return Result{count: p.high - p.low + 1}, nil
 	}
@@ -144,11 +215,8 @@ func TestRun_ExternalCancelBeforeStart(t *testing.T) {
 }
 
 func TestRun_ExternalCancelMidway(t *testing.T) {
-	sc := &Scanner{
-		numWorkers:    4,
-		partitionSize: 5,
-		logger:        log.DefaultLogger,
-	}
+	sc := newMockScanner(t, 4, 5)
+
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
 		time.Sleep(10 * time.Millisecond) // simulate work so cancel can land
 		return Result{count: p.high - p.low + 1}, nil
@@ -167,11 +235,8 @@ func TestRun_ExternalCancelMidway(t *testing.T) {
 
 func TestRun_MoreWorkersThanPartitions_Completes_NoDeadlock(t *testing.T) {
 	// 1..10 with partitionSize=10 => 1 partition, but spin up 64 workers
-	sc := &Scanner{
-		numWorkers:    64,
-		partitionSize: 10,
-		logger:        log.DefaultLogger,
-	}
+	sc := newMockScanner(t, 64, 10)
+
 	var calls atomic.Int32
 
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
@@ -186,11 +251,8 @@ func TestRun_MoreWorkersThanPartitions_Completes_NoDeadlock(t *testing.T) {
 
 func TestRun_CallsScanForEachPartition(t *testing.T) {
 	// 1..30 with partitionSize=10 => 3 partitions
-	sc := &Scanner{
-		numWorkers:    3,
-		partitionSize: 10,
-		logger:        log.DefaultLogger,
-	}
+	sc := newMockScanner(t, 3, 10)
+
 	var calls atomic.Int32
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
 		calls.Add(1)
@@ -200,4 +262,33 @@ func TestRun_CallsScanForEachPartition(t *testing.T) {
 	_, err := sc.Run(context.Background(), 1, 30)
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), calls.Load())
+}
+
+func TestRun_ShortCircuit_NoLedgerFiles(t *testing.T) {
+	ctx := context.Background()
+	ds := new(datastore.MockDataStore)
+	ds.On("ListFilePaths", mock.Anything, mock.Anything).
+		Return([]string{}, nil).Once()
+
+	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
+	sc, err := NewScanner(ds, schema, 4, 64, log.DefaultLogger)
+	require.NoError(t, err)
+
+	// Make sure the scanning path is never hit on short-circuit.
+	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
+		t.Fatalf("scan should not be called when datastore has no ledger files")
+		return Result{}, nil
+	}
+
+	from, to := uint32(1), uint32(100)
+
+	rep, err := sc.Run(ctx, from, to)
+	require.NoError(t, err)
+
+	require.Len(t, rep.Gaps, 1)
+	assert.Equal(t, Gap{Start: from, End: to}, rep.Gaps[0])
+	assert.Equal(t, uint32(0), rep.TotalFound)
+	assert.Equal(t, uint64(to-from+1), rep.TotalMissing)
+
+	ds.AssertExpectations(t)
 }

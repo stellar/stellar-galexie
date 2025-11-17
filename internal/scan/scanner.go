@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stellar/go/support/datastore"
 	"github.com/stellar/go/support/log"
 )
@@ -66,6 +67,10 @@ type Scanner struct {
 // implementation by default, but the `scan` field can be overridden for tests.
 func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
 	numWorkers uint32, partitionSize uint32, logger *log.Entry) (*Scanner, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("invalid logger: logger must not be nil")
+	}
+
 	lpf := schema.LedgersPerFile
 	if lpf == 0 {
 		return nil, fmt.Errorf("invalid ledgersPerFile [%d]: must be greater than zero", lpf)
@@ -77,11 +82,6 @@ func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
 
 	if numWorkers == 0 {
 		return nil, fmt.Errorf("invalid worker count: must be at least 1")
-	}
-
-	// Default a nil logger to the package default
-	if logger == nil {
-		logger = log.DefaultLogger
 	}
 
 	// Calculate the effective partition size
@@ -100,7 +100,7 @@ func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
 		schema:        schema,
 		numWorkers:    numWorkers,
 		partitionSize: effectiveSize,
-		logger:        logger,
+		logger:        logger.WithField("sub-system", "scanner"),
 	}
 
 	// Default to real implementation
@@ -167,6 +167,19 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 		return Report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
 	}
 
+	// If the datastore has no valid ledger files at all,
+	// the entire requested range is missing and there is nothing to scan.
+	_, findErr := datastore.FindLatestLedgerUpToSequence(ctx, s.ds, to, s.schema)
+	if findErr != nil && errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
+		missing := uint64(to) - uint64(from) + 1
+
+		return Report{
+			Gaps:         []Gap{{Start: from, End: to}},
+			TotalFound:   0,
+			TotalMissing: missing,
+		}, nil
+	}
+
 	// Compute scan partitions using normalized partition size.
 	parts, err := s.computePartitions(from, to)
 	if err != nil {
@@ -212,21 +225,30 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	}()
 
 	agg := newAggregator(s.logger)
+	var firstErr error
 
 	for {
 		select {
 		case res, ok := <-resultsCh:
 			if !ok {
-				return agg.finalize(), nil
+				return agg.finalize(), firstErr
 			}
+
 			if res.error != nil {
 				// Stop remaining work on first error.
+				if firstErr == nil {
+					firstErr = res.error
+				}
 				cancel()
+				continue
 			}
+
 			agg.add(res)
 
 		case <-scanCtx.Done():
-			// Propagate cancellation cause.
+			if firstErr != nil {
+				return agg.finalize(), firstErr
+			}
 			return agg.finalize(), scanCtx.Err()
 		}
 	}
