@@ -19,19 +19,30 @@ type LedgerFile struct {
 	low  uint32
 }
 
-// LedgerFileIter returns an iterator (iter.Seq2) that yields ledger objects in
-// descending ledger sequence order.
+// LedgerFileIter returns an iterator (iter.Seq2) over ledger files whose file
+// paths fall in the lexicographic range [startAfter, stopAfter]. Paths are
+// listed in ascending lexicographic order.
 //
-// File paths are listed lexicographically ascending by the datastore, but
-// their embedded ledger numbers decrease, so iteration effectively walks
-// backward in ledger order.
+// Both bounds are optional:
+//   - If startAfter == "", iteration begins at the first file.
+//   - If stopAfter == "", the upper bound is unbounded.
 //
-// StartAfter is an exclusive lower bound; StopAfter is an inclusive upper
-// bound in lexicographic order. The iterator stops when no more files remain,
-// the context is canceled, or an error occurs.
+// If both bounds are provided and stopAfter <= startAfter, the range is empty
+// and the iterator yields a single error.
+//
+// The iterator stops when:
+//   - all matching file paths have been consumed,
+//   - the context is canceled, or
+//   - an error occurs.
 func LedgerFileIter(ctx context.Context, ds datastore.DataStore, startAfter,
 	stopAfter string) iter.Seq2[LedgerFile, error] {
 	return func(yield func(LedgerFile, error) bool) {
+		if startAfter != "" && stopAfter != "" && startAfter >= stopAfter {
+			yield(LedgerFile{}, fmt.Errorf("invalid range: startAfter (%q) >= stopAfter (%q)",
+				startAfter, stopAfter))
+			return
+		}
+
 		for {
 			paths, err := ds.ListFilePaths(ctx, datastore.ListFileOptions{StartAfter: startAfter})
 			if err != nil {

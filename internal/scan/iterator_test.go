@@ -120,3 +120,15 @@ func TestLedgerKeyIter_StopAfter(t *testing.T) {
 
 	ds.AssertExpectations(t)
 }
+
+func TestLedgerFileIter_InvalidRange_YieldsError(t *testing.T) {
+	ctx := context.Background()
+	ds := new(datastore.MockDataStore)
+	iter := LedgerFileIter(ctx, ds, "zzz", "aaa") // startAfter > stopAfter
+	for lf, err := range iter {
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid range")
+		require.Zero(t, lf)
+	}
+	ds.AssertExpectations(t)
+}

@@ -2,11 +2,11 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stellar/go/support/datastore"
 	"github.com/stellar/go/support/log"
 )
@@ -170,14 +170,17 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	// If the datastore has no valid ledger files at all,
 	// the entire requested range is missing and there is nothing to scan.
 	_, findErr := datastore.FindLatestLedgerUpToSequence(ctx, s.ds, to, s.schema)
-	if findErr != nil && errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
-		missing := uint64(to) - uint64(from) + 1
+	if findErr != nil {
+		if errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
+			missing := uint64(to) - uint64(from) + 1
 
-		return Report{
-			Gaps:         []Gap{{Start: from, End: to}},
-			TotalFound:   0,
-			TotalMissing: missing,
-		}, nil
+			return Report{
+				Gaps:         []Gap{{Start: from, End: to}},
+				TotalFound:   0,
+				TotalMissing: missing,
+			}, nil
+		}
+		return Report{}, fmt.Errorf("datastore error: %w", findErr)
 	}
 
 	// Compute scan partitions using normalized partition size.
@@ -189,8 +192,8 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	// Use at most one worker per partition.
 	workers := min(s.numWorkers, uint32(len(parts)))
 
-	scanCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	scanCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 
 	// Prepare tasks channel and prefill all partitions.
 	tasks := make(chan Partition, len(parts))
@@ -225,31 +228,22 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	}()
 
 	agg := newAggregator(s.logger)
-	var firstErr error
-
 	for {
 		select {
 		case res, ok := <-resultsCh:
 			if !ok {
-				return agg.finalize(), firstErr
+				return agg.finalize(), context.Cause(scanCtx)
 			}
 
 			if res.error != nil {
-				// Stop remaining work on first error.
-				if firstErr == nil {
-					firstErr = res.error
-				}
-				cancel()
+				cancel(res.error)
 				continue
 			}
 
 			agg.add(res)
 
 		case <-scanCtx.Done():
-			if firstErr != nil {
-				return agg.finalize(), firstErr
-			}
-			return agg.finalize(), scanCtx.Err()
+			return agg.finalize(), context.Cause(scanCtx)
 		}
 	}
 }

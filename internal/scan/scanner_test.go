@@ -112,9 +112,9 @@ func newMockScanner(t *testing.T, numWorkers, partitionSize uint32) *Scanner {
 
 	ds := new(datastore.MockDataStore)
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
-		Return([]string{"00000000--1-10.xdr.zst"}, nil).Maybe()
+		Return([]string{"00000000--1-10.xdr.zst"}, nil).Once()
 	ds.On("GetFileMetadata", mock.Anything, mock.Anything).
-		Return(map[string]string{"EndLedger": "25"}, nil).Maybe()
+		Return(map[string]string{"end-ledger": "25"}, nil).Once()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
 	sc, err := NewScanner(ds, schema, numWorkers, partitionSize, log.DefaultLogger)
@@ -262,6 +262,25 @@ func TestRun_CallsScanForEachPartition(t *testing.T) {
 	_, err := sc.Run(context.Background(), 1, 30)
 	require.NoError(t, err)
 	assert.Equal(t, int32(3), calls.Load())
+}
+
+func TestRun_DataStoreError(t *testing.T) {
+	ctx := context.Background()
+	ds := new(datastore.MockDataStore)
+	ds.On("ListFilePaths", mock.Anything, mock.Anything).
+		Return([]string{}, fmt.Errorf("boom")).Once()
+
+	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
+	sc, err := NewScanner(ds, schema, 4, 64, log.DefaultLogger)
+	require.NoError(t, err)
+
+	from, to := uint32(1), uint32(100)
+	rep, err := sc.Run(ctx, from, to)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "boom")
+	require.Empty(t, rep)
+
+	ds.AssertExpectations(t)
 }
 
 func TestRun_ShortCircuit_NoLedgerFiles(t *testing.T) {

@@ -36,7 +36,7 @@ func scanPartition(
 		if res.count == 0 {
 			// First file: set high watermark and check top boundary gap.
 			res.high = cur.high
-			if cur.high != math.MaxUint32 && cur.high < partition.high {
+			if cur.high < partition.high {
 				res.gaps = append(res.gaps, Gap{
 					Start: cur.high + 1,
 					End:   partition.high,

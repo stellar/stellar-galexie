@@ -55,9 +55,7 @@ func (a *aggregator) finalize() Report {
 
 	var totalMissing uint64
 	for _, g := range finalGaps {
-		if g.Start <= g.End {
-			totalMissing += uint64(g.End) - uint64(g.Start) + 1
-		}
+		totalMissing += uint64(g.End) - uint64(g.Start) + 1
 	}
 
 	if a.logger != nil {

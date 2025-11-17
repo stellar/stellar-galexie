@@ -148,7 +148,7 @@ func TestWorker_CallsScanForEachTask(t *testing.T) {
 	tasks := make(chan Partition, 2)
 
 	var calls int
-	sc := &Scanner{logger: log.DefaultLogger.WithField("t", "worker")}
+	sc := &Scanner{logger: log.DefaultLogger}
 	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
 		calls++
 		return Result{count: 1}, nil
