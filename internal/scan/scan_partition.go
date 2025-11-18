@@ -24,36 +24,36 @@ func scanPartition(
 	}
 	stopAfter := schema.GetObjectKeyFromSequenceNumber(partition.low)
 
-	for cur, err := range LedgerFileIter(ctx, ds, startAfter, stopAfter) {
+	for cur, err := range datastore.LedgerFileIter(ctx, ds, startAfter, stopAfter) {
 		if err != nil {
 			return res, err
 		}
 
-		if cur.high < cur.low {
-			return res, fmt.Errorf("invalid range: %d-%d", cur.low, cur.high)
+		if cur.High < cur.Low {
+			return res, fmt.Errorf("invalid range: %d-%d", cur.Low, cur.High)
 		}
 
 		if res.count == 0 {
 			// First file: set high watermark and check top boundary gap.
-			res.high = cur.high
-			if cur.high < partition.high {
+			res.high = cur.High
+			if cur.High < partition.high {
 				res.gaps = append(res.gaps, Gap{
-					Start: cur.high + 1,
+					Start: cur.High + 1,
 					End:   partition.high,
 				})
 			}
-		} else if res.low > 0 && cur.high != math.MaxUint32 && cur.high+1 < res.low {
+		} else if res.low > 0 && cur.High != math.MaxUint32 && cur.High+1 < res.low {
 			// Internal gap: guard (+1)
 			res.gaps = append(res.gaps, Gap{
-				Start: cur.high + 1,
+				Start: cur.High + 1,
 				End:   res.low - 1,
 			})
 		}
 
 		// Avoid uint32 overflow
-		delta64 := uint64(cur.high) - uint64(cur.low) + 1
+		delta64 := uint64(cur.High) - uint64(cur.Low) + 1
 		if delta64 > uint64(math.MaxUint32) {
-			return res, fmt.Errorf("delta overflow: range %d-%d spans %d ledgers (> uint32 max)", cur.low, cur.high, delta64)
+			return res, fmt.Errorf("delta overflow: range %d-%d spans %d ledgers (> uint32 max)", cur.Low, cur.High, delta64)
 		}
 
 		sum64 := uint64(res.count) + delta64
@@ -62,7 +62,7 @@ func scanPartition(
 		}
 		// Count and advance low watermark.
 		res.count = uint32(sum64)
-		res.low = cur.low
+		res.low = cur.Low
 	}
 
 	// Final boundary reconciliation.

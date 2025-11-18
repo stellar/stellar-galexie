@@ -113,8 +113,6 @@ func newMockScanner(t *testing.T, numWorkers, partitionSize uint32) *Scanner {
 	ds := new(datastore.MockDataStore)
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{"00000000--1-10.xdr.zst"}, nil).Once()
-	ds.On("GetFileMetadata", mock.Anything, mock.Anything).
-		Return(map[string]string{"end-ledger": "25"}, nil).Once()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
 	sc, err := NewScanner(ds, schema, numWorkers, partitionSize, log.DefaultLogger)
