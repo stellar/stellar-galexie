@@ -13,7 +13,7 @@ type aggregator struct {
 	minFound   uint32
 	maxFound   uint32
 	hasData    bool
-	gaps       []Gap
+	gaps       []gap
 }
 
 // newAggregator creates a new, non-thread-safe aggregator.
@@ -25,7 +25,7 @@ func newAggregator(logger *log.Entry) *aggregator {
 	}
 }
 
-func (a *aggregator) add(res Result) {
+func (a *aggregator) add(res result) {
 	if res.error != nil {
 		return
 	}
@@ -43,12 +43,12 @@ func (a *aggregator) add(res Result) {
 	}
 }
 
-func (a *aggregator) finalize() Report {
+func (a *aggregator) finalize() report {
 	// This should not occur in normal scans.
-	// This state only happens if all partition scans canceled
+	// This state only happens if all tasks  are canceled
 	// before producing any results.
 	if !a.hasData && len(a.gaps) == 0 {
-		return Report{}
+		return report{}
 	}
 
 	finalGaps := sortAndMergeGaps(a.gaps)
@@ -62,19 +62,19 @@ func (a *aggregator) finalize() Report {
 		a.logger.WithFields(log.F{
 			"found": a.totalFound,
 			"gaps":  len(finalGaps),
-		}).Info("Report generation complete")
+		}).Info("report generation complete")
 	}
 
-	return Report{
+	return report{
 		Gaps:         finalGaps,
 		TotalFound:   a.totalFound,
 		TotalMissing: totalMissing,
-		Min:          a.minFound,
-		Max:          a.maxFound,
+		MinFound:     a.minFound,
+		MaxFound:     a.maxFound,
 	}
 }
 
-func sortAndMergeGaps(gaps []Gap) []Gap {
+func sortAndMergeGaps(gaps []gap) []gap {
 	if len(gaps) <= 1 {
 		return gaps
 	}

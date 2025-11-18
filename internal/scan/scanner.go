@@ -11,113 +11,108 @@ import (
 	"github.com/stellar/go/support/log"
 )
 
-// Report represents the aggregated outcome of a full ledger scan.
+// report represents the aggregated outcome of a full ledger scan.
 // It summarizes all gaps, counts, and the overall ledger range discovered.
-type Report struct {
-	Gaps         []Gap  `json:"gaps,omitempty"` // All missing ledger ranges found across partitions.
+type report struct {
+	Gaps         []gap  `json:"gaps,omitempty"` // All missing ledger ranges found across the scan.
 	TotalFound   uint32 `json:"total_found"`    // Total number of ledgers successfully found.
 	TotalMissing uint64 `json:"total_missing"`  // Total number of missing ledgers across all gaps.
-	Min          uint32 `json:"min"`            // Lowest ledger sequence number observed.
-	Max          uint32 `json:"max"`            // Highest ledger sequence number observed.
+	MinFound     uint32 `json:"min_found"`      // Lowest ledger sequence number observed.
+	MaxFound     uint32 `json:"max_found"`      // Highest ledger sequence number observed.
 }
 
-// Gap represents a contiguous range of missing ledgers detected
-// between existing data ranges.
-type Gap struct {
+// gap represents a contiguous range of missing ledgers.
+type gap struct {
 	Start uint32 `json:"start"` // First missing ledger in the range.
 	End   uint32 `json:"end"`   // Last missing ledger in the range.
 }
 
-// Partition defines a contiguous range of ledger sequences
-// that should be scanned together by one worker.
-type Partition struct {
-	low  uint32 // Starting ledger sequence of the partition.
-	high uint32 // Ending ledger sequence of the partition.
+// task defines a contiguous range of ledger sequences
+// that a single worker will scan.
+type task struct {
+	low  uint32 // Starting ledger sequence of the task.
+	high uint32 // Ending ledger sequence of the task.
 }
 
-// Result captures the outcome of scanning a single partition.
-type Result struct {
-	gaps  []Gap  // Gaps found within this partition.
+// result captures the outcome of a single scan task.
+type result struct {
+	gaps  []gap  // Gaps found within this task.
 	low   uint32 // Lowest ledger sequence found.
 	high  uint32 // Highest ledger sequence found.
 	count uint32 // Number of ledgers processed.
-	error error  // Error encountered while scanning this partition, if any.
+	error error  // Error encountered while running this task, if any.
 }
 
-// scanPartitionFunc defines the function signature for scanning a partition.
-// It allows the Scanner to inject a custom implementation for testing
-// or to use the default `scanPartition` function in production.
-type scanPartitionFunc func(ctx context.Context, p Partition) (Result, error)
+// scanTaskFunc defines the function signature for scanning a ledger range.
+// Allows injecting a mock implementation for testing.
+type scanTaskFunc func(ctx context.Context, p task) (result, error)
 
-// Scanner coordinates the concurrent scanning of ledger partitions.
-// It manages worker routines, partitions, and aggregates results.
+// Scanner coordinates concurrent ledger scanning.
+// It manages worker goroutines, distributes tasks, and aggregates results.
 type Scanner struct {
-	ds            datastore.DataStore
-	schema        datastore.DataStoreSchema
-	numWorkers    uint32
-	partitionSize uint32
-	logger        *log.Entry
-	scan          scanPartitionFunc // injected; defaults to real scanPartition
+	ds         datastore.DataStore
+	schema     datastore.DataStoreSchema
+	numWorkers uint32
+	taskSize   uint32 // number of ledgers per task
+	logger     *log.Entry
+	scan       scanTaskFunc // injected; defaults to real scan
 }
 
-// NewScanner constructs a new Scanner configured for parallel ledger scanning.
+// NewScanner constructs a Scanner configured for parallel ledger scanning.
 //
-// It validates and normalizes the partition size relative to the schema’s
-// LedgersPerFile setting. The function also assigns the real scanPartition
-// implementation by default, but the `scan` field can be overridden for tests.
+// It validates the task size relative to the schema’s LedgersPerFile setting,
+// normalizes it to the nearest multiple of LedgersPerFile, and sets up the
+// default scan implementation.
 func NewScanner(store datastore.DataStore, schema datastore.DataStoreSchema,
-	numWorkers uint32, partitionSize uint32, logger *log.Entry) (*Scanner, error) {
+	numWorkers uint32, taskSize uint32, logger *log.Entry) (*Scanner, error) {
 	if logger == nil {
-		return nil, fmt.Errorf("invalid logger: logger must not be nil")
+		return nil, fmt.Errorf("invalid logger: must not be nil")
 	}
 
 	lpf := schema.LedgersPerFile
 	if lpf == 0 {
-		return nil, fmt.Errorf("invalid ledgersPerFile [%d]: must be greater than zero", lpf)
+		return nil, fmt.Errorf("invalid LedgersPerFile (%d): must be greater than zero", lpf)
 	}
 
-	if partitionSize == 0 {
-		return nil, fmt.Errorf("invalid partition size: must be greater than 0")
+	if taskSize == 0 {
+		return nil, fmt.Errorf("invalid task size: must be greater than 0")
 	}
 
 	if numWorkers == 0 {
 		return nil, fmt.Errorf("invalid worker count: must be at least 1")
 	}
 
-	// Calculate the effective partition size
-	effectiveSize := partitionSize
-
-	// Ensure effectiveSize is at least one LPF
+	// Normalize task size to a multiple of LedgersPerFile.
+	effectiveSize := taskSize
 	if effectiveSize < lpf {
 		effectiveSize = lpf
 	}
-
-	// Round effectiveSize up to the nearest multiple of lpf
 	effectiveSize = ((effectiveSize + lpf - 1) / lpf) * lpf
 
 	sc := &Scanner{
-		ds:            store,
-		schema:        schema,
-		numWorkers:    numWorkers,
-		partitionSize: effectiveSize,
-		logger:        logger.WithField("sub-system", "scanner"),
+		ds:         store,
+		schema:     schema,
+		numWorkers: numWorkers,
+		taskSize:   effectiveSize,
+		logger:     logger.WithField("subsystem", "scanner"),
 	}
 
-	// Default to real implementation
-	sc.scan = func(ctx context.Context, p Partition) (Result, error) {
-		return scanPartition(ctx, p, sc.ds, sc.schema)
+	// Default to the real scan implementation.
+	sc.scan = func(ctx context.Context, p task) (result, error) {
+		return scanTask(ctx, p, sc.ds, sc.schema)
 	}
 	return sc, nil
 }
 
-func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan Result, tasks chan Partition) {
+func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan result, tasksCh chan task) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case p, ok := <-tasks:
+
+		case p, ok := <-tasksCh:
 			if !ok {
-				// tasks closed: nothing left to do
+				// No more tasks.
 				return
 			}
 
@@ -127,7 +122,7 @@ func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan Result,
 				"scan_to":   p.high,
 			})
 
-			l.Infof("worker_start [WID:%d, RANGE:%d-%d]", wid, p.low, p.high)
+			l.Infof("worker_start [id=%d, range=%d-%d]", wid, p.low, p.high)
 
 			start := time.Now()
 			res, err := s.scan(ctx, p)
@@ -141,9 +136,11 @@ func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan Result,
 
 			if err != nil {
 				res.error = err
-				l.WithFields(finishFields).WithError(err).Errorf("worker_failed [WID:%d, RANGE:%d-%d]", wid, p.low, p.high)
+				l.WithFields(finishFields).WithError(err).
+					Errorf("worker_failed [id=%d, range=%d-%d]", wid, p.low, p.high)
 			} else {
-				l.WithFields(finishFields).Infof("worker_finish [WID:%d, RANGE:%d-%d]", wid, p.low, p.high)
+				l.WithFields(finishFields).
+					Infof("worker_finish [id=%d, range=%d-%d]", wid, p.low, p.high)
 			}
 
 			select {
@@ -155,60 +152,56 @@ func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan Result,
 	}
 }
 
-// Run executes a full ledger scan across the range [from, to], coordinating
-// multiple worker goroutines and aggregating their results into a final Report.
+// Run performs a full ledger scan over the range [from, to].
 //
-// The scan is divided into partitions based on the scanner’s configured
-// partition size, and each partition is processed concurrently by workers.
-// The method will cancel all workers on the first error encountered or if the
-// provided context is canceled.
-func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
+// The range is divided into scan tasks based on the configured task size,
+// each processed concurrently by a worker. The first task error cancels
+// all workers. A final aggregated report is returned.
+func (s *Scanner) Run(ctx context.Context, from, to uint32) (report, error) {
 	if from > to {
-		return Report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
+		return report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
 	}
 
-	// If the datastore has no valid ledger files at all,
-	// the entire requested range is missing and there is nothing to scan.
+	// If the datastore contains no viable ledger files at all,
+	// the entire range is missing and no scanning is needed.
 	_, findErr := datastore.FindLatestLedgerUpToSequence(ctx, s.ds, to, s.schema)
 	if findErr != nil {
 		if errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
 			missing := uint64(to) - uint64(from) + 1
-
-			return Report{
-				Gaps:         []Gap{{Start: from, End: to}},
+			return report{
+				Gaps:         []gap{{Start: from, End: to}},
 				TotalFound:   0,
 				TotalMissing: missing,
 			}, nil
 		}
-		return Report{}, fmt.Errorf("datastore error: %w", findErr)
+		return report{}, fmt.Errorf("datastore error: %w", findErr)
 	}
 
-	// Compute scan partitions using normalized partition size.
-	parts, err := s.computePartitions(from, to)
+	// Compute scan tasks using normalized task size.
+	tasks, err := s.computeTasks(from, to)
 	if err != nil {
-		return Report{}, fmt.Errorf("failed to compute partitions for range [%d-%d]: %w", from, to, err)
+		return report{}, fmt.Errorf("failed to compute tasks for range [%d-%d]: %w", from, to, err)
 	}
 
-	// Use at most one worker per partition.
-	workers := min(s.numWorkers, uint32(len(parts)))
+	// Use at most one worker per task.
+	workers := min(s.numWorkers, uint32(len(tasks)))
 
 	scanCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	// Prepare tasks channel and prefill all partitions.
-	tasks := make(chan Partition, len(parts))
-	for _, p := range parts {
+	// Prepare tasks channel and prefill all scan tasks.
+	tasksCh := make(chan task, len(tasks))
+	for _, p := range tasks {
 		select {
-		case tasks <- p:
+		case tasksCh <- p:
 		case <-scanCtx.Done():
-			close(tasks)
-			return Report{}, scanCtx.Err()
+			close(tasksCh)
+			return report{}, scanCtx.Err()
 		}
 	}
-	close(tasks)
+	close(tasksCh)
 
-	// resultsCh collects results from workers.
-	resultsCh := make(chan Result, int(workers)*2)
+	resultsCh := make(chan result, int(workers)*2)
 
 	var wg sync.WaitGroup
 
@@ -217,7 +210,7 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 		wg.Add(1)
 		go func(id uint32) {
 			defer wg.Done()
-			s.worker(scanCtx, id, resultsCh, tasks)
+			s.worker(scanCtx, id, resultsCh, tasksCh)
 		}(wid)
 	}
 
@@ -248,24 +241,23 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	}
 }
 
-func (s *Scanner) computePartitions(from, to uint32) ([]Partition, error) {
-	if s.partitionSize == 0 {
-		return nil, fmt.Errorf("invalid partition size: must be greater than 0")
+func (s *Scanner) computeTasks(from, to uint32) ([]task, error) {
+	if s.taskSize == 0 {
+		return nil, fmt.Errorf("invalid task size: must be greater than 0")
 	}
 
 	total := uint64(to) - uint64(from) + 1
-	capacity := int((total + uint64(s.partitionSize) - 1) / uint64(s.partitionSize))
-	partitions := make([]Partition, 0, capacity)
+	capacity := int((total + uint64(s.taskSize) - 1) / uint64(s.taskSize))
+	tasks := make([]task, 0, capacity)
 
 	for low := from; low <= to; {
-		high64 := uint64(low) + uint64(s.partitionSize) - 1
+		high64 := uint64(low) + uint64(s.taskSize) - 1
 		high := min(to, uint32(high64))
-		partitions = append(partitions, Partition{low: low, high: high})
+		tasks = append(tasks, task{low: low, high: high})
 		if high == to {
 			break
 		}
-
 		low = high + 1
 	}
-	return partitions, nil
+	return tasks, nil
 }

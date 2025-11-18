@@ -11,34 +11,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestScanPartition(t *testing.T) {
+func TestScanTask(t *testing.T) {
 	type want struct {
 		high, low, count uint32
-		gaps             []Gap
+		gaps             []gap
 	}
 	cases := []struct {
 		name    string
 		batches [][]string
-		part    Partition
+		part    task
 		want    want
 	}{
 		{
 			"full missing",
 			[][]string{{}},
-			Partition{low: 1, high: 100},
-			want{0, 0, 0, []Gap{{1, 100}}},
+			task{low: 1, high: 100},
+			want{0, 0, 0, []gap{{1, 100}}},
 		},
 		{
 			"bottom-only gap",
 			[][]string{{fpath(60, 100)}, {}},
-			Partition{low: 1, high: 100},
-			want{100, 60, 41, []Gap{{1, 59}}},
+			task{low: 1, high: 100},
+			want{100, 60, 41, []gap{{1, 59}}},
 		},
 		{
 			"contiguous coverage",
 			[][]string{{fpath(50, 100)}, {fpath(1, 49)}, {}},
-			Partition{low: 1, high: 100},
-			want{100, 1, 100, []Gap{}},
+			task{low: 1, high: 100},
+			want{100, 1, 100, []gap{}},
 		},
 	}
 
@@ -51,7 +51,7 @@ func TestScanPartition(t *testing.T) {
 			}
 			schema := datastore.DataStoreSchema{LedgersPerFile: 64}
 
-			res, err := scanPartition(ctx, c.part, ds, schema)
+			res, err := scanTask(ctx, c.part, ds, schema)
 			require.NoError(t, err)
 			assert.Equal(t, c.want.high, res.high)
 			assert.Equal(t, c.want.low, res.low)
@@ -63,23 +63,23 @@ func TestScanPartition(t *testing.T) {
 	}
 }
 
-func TestScanPartitionAdvanced(t *testing.T) {
+func TestScanTaskAdvanced(t *testing.T) {
 	type expected struct {
 		high, low, count uint32
-		gaps             []Gap
+		gaps             []gap
 	}
 
 	cases := []struct {
 		name    string
 		lpf     uint32
-		part    Partition
+		part    task
 		batches [][]string // pages returned by ListFilePaths in order
 		want    expected
 	}{
 		{
 			name: "Top+Internal+Bottom gaps",
 			lpf:  64,
-			part: Partition{low: 1, high: 100},
+			part: task{low: 1, high: 100},
 			batches: [][]string{
 				{fpath(95, 98)}, // page 1
 				{fpath(90, 92)}, // page 2
@@ -90,7 +90,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 				high:  98,
 				low:   80,
 				count: (98 - 95 + 1) + (92 - 90 + 1) + (89 - 80 + 1),
-				gaps: []Gap{
+				gaps: []gap{
 					{Start: 99, End: 100}, // top
 					{Start: 93, End: 94},  // internal
 					{Start: 1, End: 79},   // bottom
@@ -100,7 +100,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 		{
 			name: "Single-ledger-per-file with mixed gaps",
 			lpf:  1,
-			part: Partition{low: 1, high: 5},
+			part: task{low: 1, high: 5},
 			batches: [][]string{
 				{spath(5)}, // first seen == high → no top gap
 				{spath(3)}, // internal gap [4,4]
@@ -111,7 +111,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 				high:  5,
 				low:   1,
 				count: 3, // three single-ledger files
-				gaps: []Gap{
+				gaps: []gap{
 					{Start: 4, End: 4},
 					{Start: 2, End: 2},
 				},
@@ -120,7 +120,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 		{
 			name: "Multiple files in one page",
 			lpf:  64,
-			part: Partition{low: 1, high: 100},
+			part: task{low: 1, high: 100},
 			batches: [][]string{
 				{spath(100), fpath(90, 95)}, // page 1: top covered; internal gap [96,99]
 				{fpath(80, 89)},             // page 2
@@ -130,7 +130,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 				high:  100,
 				low:   80,
 				count: 1 + (95 - 90 + 1) + (89 - 80 + 1),
-				gaps: []Gap{
+				gaps: []gap{
 					{Start: 96, End: 99}, // internal
 					{Start: 1, End: 79},  // bottom
 				},
@@ -150,7 +150,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 
 			schema := datastore.DataStoreSchema{LedgersPerFile: c.lpf}
 
-			res, err := scanPartition(ctx, c.part, ds, schema)
+			res, err := scanTask(ctx, c.part, ds, schema)
 			require.NoError(t, err)
 
 			assert.Equal(t, c.want.high, res.high, "high watermark")
@@ -163,7 +163,7 @@ func TestScanPartitionAdvanced(t *testing.T) {
 	}
 }
 
-func TestScanPartition_InvalidRange_Error(t *testing.T) {
+func TestScanTask_InvalidRange_Error(t *testing.T) {
 	ctx := context.Background()
 	ds := new(datastore.MockDataStore)
 
@@ -175,14 +175,14 @@ func TestScanPartition_InvalidRange_Error(t *testing.T) {
 		Return([]string{}, nil).Maybe()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
-	part := Partition{low: 1, high: 100}
+	part := task{low: 1, high: 100}
 
-	_, err := scanPartition(ctx, part, ds, schema)
+	_, err := scanTask(ctx, part, ds, schema)
 	require.Error(t, err)
 	ds.AssertExpectations(t)
 }
 
-func TestScanPartition_DatastoreError_BubblesUp(t *testing.T) {
+func TestScanTask_DatastoreError_BubblesUp(t *testing.T) {
 	ctx := context.Background()
 	ds := new(datastore.MockDataStore)
 
@@ -193,16 +193,16 @@ func TestScanPartition_DatastoreError_BubblesUp(t *testing.T) {
 		Return([]string(nil), assert.AnError).Once()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
-	part := Partition{low: 1, high: 100}
+	part := task{low: 1, high: 100}
 
-	_, err := scanPartition(ctx, part, ds, schema)
+	_, err := scanTask(ctx, part, ds, schema)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, assert.AnError)
 
 	ds.AssertExpectations(t)
 }
 
-func TestScanPartition_ContextCanceledMidIteration(t *testing.T) {
+func TestScanTask_ContextCanceledMidIteration(t *testing.T) {
 	ctx := context.Background()
 	ds := new(datastore.MockDataStore)
 
@@ -213,9 +213,9 @@ func TestScanPartition_ContextCanceledMidIteration(t *testing.T) {
 		Return([]string(nil), context.Canceled).Once()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
-	part := Partition{low: 1, high: 100}
+	part := task{low: 1, high: 100}
 
-	_, err := scanPartition(ctx, part, ds, schema)
+	_, err := scanTask(ctx, part, ds, schema)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
 
