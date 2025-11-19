@@ -34,8 +34,6 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFF5--10-19.xdr.zst"}).Return([]string{"FFFFFFFF--0-9.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFFFF--0-9.xdr.zst").
-					Return(map[string]string{"end-ledger": "9"}, nil).Once()
 			},
 		},
 		{
@@ -49,7 +47,7 @@ func TestResumability(t *testing.T) {
 			},
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
-					StartAfter: "FFFFFFEB--20-29.xdr.zst"}).Return([]string{""}, nil).Once()
+					StartAfter: "FFFFFFEB--20-29.xdr.zst"}).Return([]string{}, nil).Once()
 			},
 		},
 		{
@@ -63,7 +61,7 @@ func TestResumability(t *testing.T) {
 			},
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
-					StartAfter: "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}).Return([]string{""}, nil).Once()
+					StartAfter: "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}).Return([]string{}, nil).Once()
 			},
 		},
 		{
@@ -79,8 +77,6 @@ func TestResumability(t *testing.T) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFFF--0-6399/FFFFFF3F--192-255.xdr.zst"}).
 					Return([]string{"FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst").
-					Return(map[string]string{"end-ledger": "191"}, nil).Once()
 			},
 		},
 		{
@@ -96,8 +92,6 @@ func TestResumability(t *testing.T) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}).
 					Return([]string{"FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst").
-					Return(map[string]string{"end-ledger": "191"}, nil).Once()
 			},
 		},
 		{
@@ -128,8 +122,6 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFC3--60-69.xdr.zst"}).Return([]string{"FFFFFFE1--30-39.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFFE1--30-39.xdr.zst").
-					Return(map[string]string{"end-ledger": "39"}, nil).Once()
 			},
 		},
 		{
@@ -144,8 +136,6 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFA5--90-99.xdr.zst"}).Return([]string{"FFFFFFB9--70-79.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFFB9--70-79.xdr.zst").
-					Return(map[string]string{"end-ledger": "79"}, nil).Once()
 			},
 		},
 		{
@@ -161,8 +151,6 @@ func TestResumability(t *testing.T) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFEE7--280-289.xdr.zst"}).
 					Return([]string{"FFFFFEF1--270-279.xdr.zst", "FFFFFEFB--260-269.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFEF1--270-279.xdr.zst").
-					Return(map[string]string{"end-ledger": "279"}, nil).Once()
 			},
 		},
 		{
@@ -176,7 +164,7 @@ func TestResumability(t *testing.T) {
 			},
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
-					StartAfter: "FFFFFF7D--130-139.xdr.zst"}).Return([]string{""}, nil).Once()
+					StartAfter: "FFFFFF7D--130-139.xdr.zst"}).Return([]string{}, nil).Once()
 			},
 		},
 		{
@@ -204,8 +192,6 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{}).
 					Return([]string{"FFFFFEF1--270-279.xdr.zst", "FFFFFEFB--260-269.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFFEF1--270-279.xdr.zst").
-					Return(map[string]string{"end-ledger": "279"}, nil).Once()
 			},
 		},
 		{
@@ -221,8 +207,6 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{}).
 					Return([]string{"FFFFF73F--2240-2249.xdr.zst", "FFFFF749--2230-2239.xdr.zst"}, nil).Once()
-				mockDataStore.On("GetFileMetadata", ctx, "FFFFF73F--2240-2249.xdr.zst").
-					Return(map[string]string{"end-ledger": "2249"}, nil).Once()
 			},
 		},
 	}
