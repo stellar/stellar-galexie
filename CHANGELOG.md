@@ -3,7 +3,19 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
-## Pending
+## [v24.1.0]
+
+### New Features
+
+- Introduced a new `replace` command ([#5826](https://github.com/stellar/go/pull/5826)).
+  This command allows users to fully re-export all ledgers within a specified range, explicitly overwriting any existing data files in the destination data lake.
+   `stellar-galexie replace --start <start> --end <end>`
+
+### Bug Fixes
+
+- Correctly handle destination bucket paths that include a trailing slash ([#5831](https://github.com/stellar/go/pull/5831))
+
+## [v24.0.0]
 
 ### New Features
  - Added new sub-command `load-test` to perform load testing on Galexie export - ([#5820](https://github.com/stellar/go/pull/5820)). It uses the (ingest/loadtest)[https://github.com/stellar/go/tree/master/ingest/loadtest] sdk tool which generates synthetic ledgers at runtime from a pre-built synthetic ledgers data file. You must create the synthetic ledgers data file first with (ingest/loadtest generator tool)[../horizon/internal/integration/generate_ledgers_test.go]. 
