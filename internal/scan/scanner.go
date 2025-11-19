@@ -247,12 +247,17 @@ func (s *Scanner) computeTasks(from, to uint32) ([]task, error) {
 	}
 
 	total := uint64(to) - uint64(from) + 1
-	capacity := int((total + uint64(s.taskSize) - 1) / uint64(s.taskSize))
+	capacity := (total + uint64(s.taskSize) - 1) / uint64(s.taskSize)
 	tasks := make([]task, 0, capacity)
 
 	for low := from; low <= to; {
 		high64 := uint64(low) + uint64(s.taskSize) - 1
-		high := min(to, uint32(high64))
+		var high uint32
+		if high64 > uint64(to) {
+			high = to
+		} else {
+			high = uint32(high64)
+		}
 		tasks = append(tasks, task{low: low, high: high})
 		if high == to {
 			break

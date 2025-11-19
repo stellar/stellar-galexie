@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -308,4 +309,21 @@ func TestRun_ShortCircuit_NoLedgerFiles(t *testing.T) {
 	assert.Equal(t, uint64(to-from+1), rep.TotalMissing)
 
 	ds.AssertExpectations(t)
+}
+
+func TestComputeTasks_HighUint32Max(t *testing.T) {
+	from := uint32(math.MaxUint32 - 50)
+	to := uint32(math.MaxUint32)
+
+	sc := &Scanner{
+		taskSize: 1000,
+	}
+
+	tasks, err := sc.computeTasks(from, to)
+	require.NoError(t, err)
+	require.Len(t, tasks, 1)
+
+	got := tasks[0]
+	require.Equal(t, from, got.low)
+	require.Equal(t, to, got.high)
 }
