@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/stellar/go/historyarchive"
 	"github.com/stellar/go/ingest/ledgerbackend"
@@ -237,7 +237,8 @@ func newAdminServer(adminPort int, prometheusRegistry *prometheus.Registry) *htt
 }
 
 func (a *App) Run(runtimeSettings RuntimeSettings) error {
-	ctx, cancel := context.WithCancel(runtimeSettings.Ctx)
+	// Handle OS signals/ctx cancellation to gracefully terminate the service
+	ctx, cancel := signal.NotifyContext(runtimeSettings.Ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	if err := a.init(ctx, runtimeSettings); err != nil {
@@ -252,32 +253,26 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 	}
 	defer a.close()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-
-		err := a.uploader.Run(ctx, uploadShutdownTimeout)
-		if err != nil {
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		if err := a.uploader.Run(egCtx, uploadShutdownTimeout); err != nil {
 			logger.WithError(err).Error("Error executing Uploader")
-			cancel()
+			return err
 		}
-	}()
+		return nil
+	})
 
-	go func() {
-		defer wg.Done()
-
-		err := a.exportManager.Run(ctx, a.config.StartLedger, a.config.EndLedger)
-		if err != nil {
-			if !errors.Is(err, loadtest.ErrLoadTestDone) {
-				logger.WithError(err).Error("Error executing ExportManager")
-			} else {
+	eg.Go(func() error {
+		if err := a.exportManager.Run(egCtx, a.config.StartLedger, a.config.EndLedger); err != nil {
+			if errors.Is(err, loadtest.ErrLoadTestDone) {
 				logger.Info("Load test completed.")
+				return nil
 			}
-			cancel()
+			logger.WithError(err).Error("Error executing ExportManager")
+			return err
 		}
-	}()
+		return nil
+	})
 
 	if a.adminServer != nil {
 		// no need to include this goroutine in the wait group
@@ -292,20 +287,12 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 		}()
 	}
 
-	// Handle OS signals to gracefully terminate the service
-	sigCh := make(chan os.Signal, 1)
-	defer close(sigCh)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig, ok := <-sigCh
-		if ok {
-			logger.Infof("Received termination signal: %v", sig)
-			cancel()
-		}
-	}()
-
-	wg.Wait()
-	logger.Info("Shutting down Galexie")
+	// Wait for all goroutines to finish
+	if err := eg.Wait(); err != nil {
+		logger.WithError(err).Error("Stopping Galexie")
+	} else {
+		logger.Info("Shutting down Galexie")
+	}
 
 	if a.adminServer != nil {
 		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), adminServerShutdownTimeout)
