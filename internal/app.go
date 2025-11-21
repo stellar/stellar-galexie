@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/stellar/go/historyarchive"
 	"github.com/stellar/go/ingest/ledgerbackend"
@@ -253,26 +253,31 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 	}
 	defer a.close()
 
-	eg, egCtx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		if err := a.uploader.Run(egCtx, uploadShutdownTimeout); err != nil {
-			logger.WithError(err).Error("Error executing Uploader")
-			return err
-		}
-		return nil
-	})
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	eg.Go(func() error {
-		if err := a.exportManager.Run(egCtx, a.config.StartLedger, a.config.EndLedger); err != nil {
+	go func() {
+		defer wg.Done()
+
+		err := a.uploader.Run(ctx, uploadShutdownTimeout)
+		if err != nil {
+			logger.WithError(err).Error("Error executing Uploader")
+			cancel()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		err := a.exportManager.Run(ctx, a.config.StartLedger, a.config.EndLedger)
+		if err != nil {
 			if errors.Is(err, loadtest.ErrLoadTestDone) {
 				logger.Info("Load test completed.")
-				return nil
+			} else {
+				logger.WithError(err).Error("Error executing ExportManager")
 			}
-			logger.WithError(err).Error("Error executing ExportManager")
-			return err
 		}
-		return nil
-	})
+	}()
 
 	if a.adminServer != nil {
 		// no need to include this goroutine in the wait group
@@ -287,12 +292,8 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 		}()
 	}
 
-	// Wait for all goroutines to finish
-	if err := eg.Wait(); err != nil {
-		logger.WithError(err).Error("Stopping Galexie")
-	} else {
-		logger.Info("Shutting down Galexie")
-	}
+	wg.Wait()
+	logger.Info("Shutting down Galexie")
 
 	if a.adminServer != nil {
 		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), adminServerShutdownTimeout)
