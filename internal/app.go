@@ -237,7 +237,8 @@ func newAdminServer(adminPort int, prometheusRegistry *prometheus.Registry) *htt
 }
 
 func (a *App) Run(runtimeSettings RuntimeSettings) error {
-	ctx, cancel := context.WithCancel(runtimeSettings.Ctx)
+	// Handle OS signals/ctx cancellation to gracefully terminate the service
+	ctx, cancel := signal.NotifyContext(runtimeSettings.Ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	if err := a.init(ctx, runtimeSettings); err != nil {
@@ -270,12 +271,11 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 
 		err := a.exportManager.Run(ctx, a.config.StartLedger, a.config.EndLedger)
 		if err != nil {
-			if !errors.Is(err, loadtest.ErrLoadTestDone) {
-				logger.WithError(err).Error("Error executing ExportManager")
-			} else {
+			if errors.Is(err, loadtest.ErrLoadTestDone) {
 				logger.Info("Load test completed.")
+			} else {
+				logger.WithError(err).Error("Error executing ExportManager")
 			}
-			cancel()
 		}
 	}()
 
@@ -291,18 +291,6 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 			}
 		}()
 	}
-
-	// Handle OS signals to gracefully terminate the service
-	sigCh := make(chan os.Signal, 1)
-	defer close(sigCh)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig, ok := <-sigCh
-		if ok {
-			logger.Infof("Received termination signal: %v", sig)
-			cancel()
-		}
-	}()
 
 	wg.Wait()
 	logger.Info("Shutting down Galexie")
