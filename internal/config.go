@@ -24,6 +24,7 @@ import (
 const (
 	Pubnet    = "pubnet"
 	Testnet   = "testnet"
+	Futurenet = "futurenet"
 	UserAgent = "galexie"
 )
 
@@ -137,7 +138,6 @@ func (config *Config) Resumable() bool {
 // Validates requested ledger range, and will automatically adjust it
 // to be ledgers-per-file boundary aligned
 func (config *Config) ValidateAndSetLedgerRange(ctx context.Context, archive historyarchive.ArchiveInterface) error {
-
 	if config.Mode == LoadTest {
 		if config.LoadTestLedgersPath == "" {
 			return errors.New("ledgers-path is required for load test mode")
@@ -300,10 +300,15 @@ func (config *Config) processToml(tomlPath string) error {
 		networkArchiveUrls = network.TestNetworkhistoryArchiveURLs
 		config.SerializedCaptiveCoreToml = ledgerbackend.TestnetDefaultConfig
 
+	case Futurenet:
+		networkPassPhrase = network.FutureNetworkPassphrase
+		networkArchiveUrls = network.FutureNetworkhistoryArchiveURLs
+		config.SerializedCaptiveCoreToml = ledgerbackend.FuturenetDefaultConfig
+
 	default:
 		return errors.New("invalid captive core config, " +
-			"preconfigured_network must be set to 'pubnet' or 'testnet' or network_passphrase, history_archive_urls," +
-			" and captive_core_toml_path must be set")
+			"preconfigured_network must be set to 'pubnet', 'testnet', or 'futurenet', or network_passphrase," +
+			"history_archive_urls and captive_core_toml_path must be set")
 	}
 
 	if config.StellarCoreConfig.NetworkPassphrase == "" {
