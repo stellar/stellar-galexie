@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -87,7 +88,42 @@ func DefineCommands() *cobra.Command {
 			return galexieCmdRunner(settings)
 		},
 	}
+	var detectGapsCmd = &cobra.Command{
+		Use:   "detect-gaps",
+		Short: "Identify gaps in the specified ledger range.",
+		Long: "Scans every ledger sequence between the --start and --end values (inclusive) and " +
+			"reports any gaps or missing ranges.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			settings := bindCliParameters(cmd.PersistentFlags().Lookup("start"),
+				cmd.PersistentFlags().Lookup("end"),
+				cmd.PersistentFlags().Lookup("config-file"),
+			)
+			settings.Mode = galexie.DetectGaps
+			settings.Ctx = cmd.Context()
+			if settings.Ctx == nil {
+				settings.Ctx = context.Background()
+			}
 
+			outputFlag := cmd.Flags().Lookup("output-file")
+			viper.BindPFlag(outputFlag.Name, outputFlag)
+			viper.BindEnv(outputFlag.Name, strutils.KebabToConstantCase(outputFlag.Name))
+			outputFile := viper.GetString(outputFlag.Name)
+
+			if outputFile != "" {
+				f, err := os.Create(outputFile)
+				if err != nil {
+					return fmt.Errorf("failed to create output file %q: %w",
+						outputFile, err)
+				}
+				defer f.Close()
+				settings.ReportWriter = f
+			} else {
+				settings.ReportWriter = cmd.OutOrStdout()
+			}
+
+			return galexieCmdRunner(settings)
+		},
+	}
 	var loadTestCmd = &cobra.Command{
 		Use: "load-test",
 		Short: "runs an ingestion load test for galexie. the range of ledgers to be processed " +
@@ -114,6 +150,7 @@ func DefineCommands() *cobra.Command {
 	rootCmd.AddCommand(scanAndFillCmd)
 	rootCmd.AddCommand(appendCmd)
 	rootCmd.AddCommand(ReplaceCmd)
+	rootCmd.AddCommand(detectGapsCmd)
 	rootCmd.AddCommand(loadTestCmd)
 
 	commonFlags := pflag.NewFlagSet("common_flags", pflag.ExitOnError)
@@ -130,9 +167,14 @@ func DefineCommands() *cobra.Command {
 	appendCmd.PersistentFlags().Uint32P("start", "s", 0, "Starting ledger (inclusive), must be set to a value greater than 1")
 	appendCmd.PersistentFlags().Uint32P("end", "e", 0, "Ending ledger (inclusive), optional, setting to non-zero means bounded mode, "+
 		"only export ledgers from 'start' up to 'end' value which must be greater than 'start' and less than the network's current ledger. "+
-		"If 'end' is absent or '0' means unbounded mode, exporter will continue to run indefintely and export the latest closed ledgers from network as they are generated in real time.")
+		"If 'end' is absent or '0' means unbounded mode, exporter will continue to run indefinitely and export the latest closed ledgers from network as they are generated in real time.")
 	appendCmd.PersistentFlags().String("config-file", "config.toml", "Path to the TOML config file. Defaults to 'config.toml' on runtime working directory path.")
 	viper.BindPFlags(appendCmd.PersistentFlags())
+
+	detectGapsCmd.PersistentFlags().AddFlagSet(commonFlags)
+	detectGapsCmd.PersistentFlags().StringP("output-file", "o", "",
+		"Path to write JSON report (defaults to stdout)")
+	viper.BindPFlags(detectGapsCmd.PersistentFlags())
 
 	loadTestCmd.PersistentFlags().Uint32P("start", "s", 0, "Starting ledger (inclusive). load test will use as the starting point from live network upon which synthetic ledger changes are generated. Must be greater than 1")
 	loadTestCmd.PersistentFlags().Uint32P("end", "e", 0, "Ending ledger (inclusive), optional. must be greater than 'start' if present. If 'end' is absent or set to '0' load test will replay all ledgers in ledgers-path file. otherwise load test will stop after reaching 'end' ledger regardless of any additional ledgers in ledgers-path file.")

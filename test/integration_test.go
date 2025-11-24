@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/stellar/stellar-galexie/cmd"
 	galexie "github.com/stellar/stellar-galexie/internal"
+	"github.com/stellar/stellar-galexie/internal/scan"
 )
 
 const (
@@ -134,7 +136,7 @@ func (s *GalexieTestSuite) TestScanAndFill() {
 	require.NoError(err)
 }
 
-func (s *GalexieTestSuite) TesReplace() {
+func (s *GalexieTestSuite) TestReplace() {
 	require := s.Require()
 
 	rootCmd := cmd.DefineCommands()
@@ -255,6 +257,113 @@ func (s *GalexieTestSuite) TestAppendUnbounded() {
 		_, err = datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
 		assert.NoError(err)
 	}, 180*time.Second, 50*time.Millisecond, "append unbounded did not work")
+}
+
+func (s *GalexieTestSuite) TestDetectGaps() {
+	require := s.Require()
+
+	// scan-and-fill a partial range
+	fillCmd := cmd.DefineCommands()
+	fillCmd.SetArgs([]string{
+		"scan-and-fill",
+		"--start", "4",
+		"--end", "8",
+		"--config-file", s.tempConfigFile,
+	})
+
+	require.NoError(fillCmd.ExecuteContext(s.ctx))
+
+	// Run detect-gaps on a wider range that includes missing ledgers
+	rootCmd := cmd.DefineCommands()
+
+	var detectOut bytes.Buffer
+	var detectErr bytes.Buffer
+	rootCmd.SetOut(&detectOut)
+	rootCmd.SetErr(&detectErr)
+
+	rootCmd.SetArgs([]string{
+		"detect-gaps",
+		"--start", "2",
+		"--end", "20",
+		"--config-file", s.tempConfigFile,
+	})
+
+	require.NoError(rootCmd.ExecuteContext(s.ctx))
+
+	outputJSON := detectOut.String()
+	s.T().Log("detect-gaps JSON output:\n" + outputJSON)
+
+	var resp galexie.DetectGapsOutput
+	require.NoError(json.Unmarshal([]byte(outputJSON), &resp))
+
+	require.Equal(uint32(2), resp.ScanFrom)
+	require.Equal(uint32(20), resp.ScanTo)
+
+	// Since we only filled 4–8, we expect missing ranges before and after.
+	require.Equal(len(resp.Report.Gaps), 2)
+	require.Equal(resp.Report.TotalMissing, uint64(14))
+	require.Equal(resp.Report.TotalFound, uint32(5))
+	require.Equal(resp.Report.Gaps[0], scan.Gap{
+		Start: 2,
+		End:   3,
+	})
+	require.Equal(resp.Report.Gaps[1], scan.Gap{
+		Start: 9,
+		End:   20,
+	})
+}
+
+func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
+	require := s.Require()
+
+	rootCmd := cmd.DefineCommands()
+
+	// Run a small scan-and-fill to ensure some ledgers exist.
+	rootCmd.SetArgs([]string{
+		"scan-and-fill",
+		"--start", "4",
+		"--end", "8",
+		"--config-file", s.tempConfigFile,
+	})
+	var errBuf, outBuf bytes.Buffer
+	rootCmd.SetErr(&errBuf)
+	rootCmd.SetOut(&outBuf)
+	err := rootCmd.ExecuteContext(s.ctx)
+	require.NoError(err)
+
+	// Now run detect-gaps over a wider range and write JSON to a file.
+	tmpDir := s.T().TempDir()
+	reportPath := filepath.Join(tmpDir, "gaps.json")
+
+	rootCmd.SetArgs([]string{
+		"detect-gaps",
+		"--start", "2",
+		"--end", "20",
+		"--config-file", s.tempConfigFile,
+		"--output-file", reportPath,
+	})
+	errBuf.Reset()
+	outBuf.Reset()
+	rootCmd.SetErr(&errBuf)
+	rootCmd.SetOut(&outBuf)
+
+	require.NoError(rootCmd.ExecuteContext(s.ctx))
+
+	// The report file should exist.
+	data, readErr := os.ReadFile(reportPath)
+	require.NoError(readErr)
+
+	// Decode JSON.
+	var out galexie.DetectGapsOutput
+	require.NoError(json.Unmarshal(data, &out))
+
+	// Basic assertions on content.
+	require.Equal(uint32(2), out.ScanFrom)
+	require.Equal(uint32(20), out.ScanTo)
+
+	// Should have at least one gap, since we only filled 4–8.
+	require.Greater(len(out.Report.Gaps), 0)
+	require.Greater(out.Report.TotalMissing, uint64(0))
 }
 
 func (s *GalexieTestSuite) SetupTest() {

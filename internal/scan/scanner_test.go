@@ -81,7 +81,7 @@ func TestComputeTasks(t *testing.T) {
 		from, to, size uint32
 		want           []task
 	}{
-		{"basic", 1, 10, 3, []task{{1, 3}, {4, 6},
+		{"basic", 1, 10, 3, []task{{2, 3}, {4, 6},
 			{7, 9}, {10, 10}}},
 		{"exact multiple", 100, 115, 4, []task{{100, 103},
 			{104, 107}, {108, 111}, {112, 115}}},
@@ -113,9 +113,9 @@ func newMockScanner(t *testing.T, numWorkers, taskSize uint32) *Scanner {
 
 	ds := new(datastore.MockDataStore)
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
-		Return([]string{"00000000--1-10.xdr.zst"}, nil).Once()
+		Return([]string{"00000000--1.xdr.zst"}, nil).Once()
 
-	schema := datastore.DataStoreSchema{LedgersPerFile: 10}
+	schema := datastore.DataStoreSchema{LedgersPerFile: 1}
 	sc, err := NewScanner(ds, schema, numWorkers, taskSize, log.DefaultLogger)
 	require.NoError(t, err)
 
@@ -128,40 +128,67 @@ func newMockScanner(t *testing.T, numWorkers, taskSize uint32) *Scanner {
 }
 
 func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {
-	sc := newMockScanner(t, 3, 10)
+	t.Run("lpf=1", func(t *testing.T) {
+		sc := newMockScanner(t, 3, 10)
+		sc.schema.LedgersPerFile = 1
 
-	var total atomic.Uint64
-	sc.scan = func(ctx context.Context, p task) (result, error) {
-		cnt := p.high - p.low + 1
-		total.Add(uint64(cnt))
-		return result{count: cnt}, nil
-	}
+		var total atomic.Uint64
+		sc.scan = func(ctx context.Context, p task) (result, error) {
+			cnt := p.high - p.low + 1
+			total.Add(uint64(cnt))
+			return result{count: cnt}, nil
+		}
 
-	_, err := sc.Run(context.Background(), 1, 25)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(25), total.Load())
+		_, err := sc.Run(context.Background(), 1, 25)
+		require.NoError(t, err)
+
+		// With 1 ledger per file we scan 24 ledgers (2 - 25).
+		assert.Equal(t, uint64(24), total.Load())
+	})
+
+	t.Run("lpf>1", func(t *testing.T) {
+		// Example: 10 ledgers per file.
+		sc := newMockScanner(t, 3, 10)
+		sc.schema.LedgersPerFile = 10
+
+		var total atomic.Uint64
+		sc.scan = func(ctx context.Context, p task) (result, error) {
+			cnt := p.high - p.low + 1
+			total.Add(uint64(cnt))
+			return result{count: cnt}, nil
+		}
+
+		_, err := sc.Run(context.Background(), 1, 25)
+		require.NoError(t, err)
+
+		// With 10 ledger per file we scan 28 ledgers (2 - 29).
+		assert.Equal(t, uint64(28), total.Load())
+	})
 }
 
 func TestScannerRun_ReturnsFirstErrorAndPartialReport(t *testing.T) {
 	ctx := context.Background()
 	sc := newMockScanner(t, 1, 10)
+	sc.schema.LedgersPerFile = 10
 
 	errScan := fmt.Errorf("scan failed")
 
 	// Override scan to control behavior:
-	// - First task [1-10]: success, count=10
-	// - Second task [11-20]: fails with errScan
+	// - First task [2-9]: success, count=8
+	// - Second task [10-19]: fails with errScan
 	sc.scan = func(ctx context.Context, p task) (result, error) {
 		switch {
-		case p.low == 1 && p.high == 10:
+		case p.low == 2 && p.high == 9:
 			return result{
 				gaps:  nil,
-				low:   1,
-				high:  10,
-				count: 10,
+				low:   2,
+				high:  9,
+				count: 8,
 				error: nil,
 			}, nil
-		case p.low == 11 && p.high == 20:
+		case p.low == 10 && p.high == 19:
+			return result{}, errScan
+		case p.low == 20 && p.high == 29:
 			return result{}, errScan
 		default:
 			t.Fatalf("unexpected scan task: %+v", p)
@@ -169,15 +196,15 @@ func TestScannerRun_ReturnsFirstErrorAndPartialReport(t *testing.T) {
 		}
 	}
 
-	report, gotErr := sc.Run(ctx, 1, 20)
+	rep, gotErr := sc.Run(ctx, 1, 20)
 	require.Error(t, gotErr)
 	require.ErrorIs(t, gotErr, errScan)
 
 	// We expect only the first task's data to be aggregated.
-	assert.EqualValues(t, report.TotalFound, 10)
-	assert.EqualValues(t, report.MinFound, 1)
-	assert.EqualValues(t, report.MaxFound, 10)
-	assert.Len(t, report.Gaps, 0)
+	assert.EqualValues(t, rep.TotalFound, 8)
+	assert.EqualValues(t, rep.MinFound, 2)
+	assert.EqualValues(t, rep.MaxFound, 9)
+	assert.Len(t, rep.Gaps, 0)
 }
 
 func TestRun_FirstErrorCancelsOthers(t *testing.T) {
@@ -234,7 +261,7 @@ func TestRun_ExternalCancelMidway(t *testing.T) {
 
 func TestRun_MoreWorkersThanTasks_Completes_NoDeadlock(t *testing.T) {
 	// 1..10 with taskSize=10 => 1 task, but spin up 64 workers
-	sc := newMockScanner(t, 64, 10)
+	sc := newMockScanner(t, 64, 1)
 
 	var calls atomic.Int32
 
@@ -245,22 +272,30 @@ func TestRun_MoreWorkersThanTasks_Completes_NoDeadlock(t *testing.T) {
 
 	_, err := sc.Run(context.Background(), 1, 10)
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), calls.Load())
+	assert.Equal(t, int32(10), calls.Load())
 }
 
 func TestRun_CallsScanForEachTask(t *testing.T) {
-	// 1..30 with taskSize=10 => 3 task
 	sc := newMockScanner(t, 3, 10)
+	sc.schema.LedgersPerFile = 10
 
+	var minN, maxN atomic.Uint32
+	minN.Store(^uint32(0))
 	var calls atomic.Int32
 	sc.scan = func(ctx context.Context, p task) (result, error) {
+		minN.Store(min(minN.Load(), p.low))
+		maxN.Store(max(maxN.Load(), p.high))
 		calls.Add(1)
 		return result{count: p.high - p.low + 1}, nil
 	}
 
 	_, err := sc.Run(context.Background(), 1, 30)
 	require.NoError(t, err)
-	assert.Equal(t, int32(3), calls.Load())
+
+	// 1..30 with taskSize=10 and ledgersPerFile = 10 => 4 task (2-9, 10-19, 20-29, 30-39)
+	assert.Equal(t, int32(4), calls.Load())
+	assert.Equal(t, minN.Load(), uint32(2))
+	assert.Equal(t, maxN.Load(), uint32(39))
 }
 
 func TestRun_DataStoreError(t *testing.T) {
@@ -304,7 +339,7 @@ func TestRun_ShortCircuit_NoLedgerFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, rep.Gaps, 1)
-	assert.Equal(t, gap{Start: from, End: to}, rep.Gaps[0])
+	assert.Equal(t, Gap{Start: from, End: to}, rep.Gaps[0])
 	assert.Equal(t, uint32(0), rep.TotalFound)
 	assert.Equal(t, uint64(to-from+1), rep.TotalMissing)
 
@@ -317,6 +352,7 @@ func TestComputeTasks_HighUint32Max(t *testing.T) {
 
 	sc := &Scanner{
 		taskSize: 1000,
+		schema:   datastore.DataStoreSchema{LedgersPerFile: 1},
 	}
 
 	tasks, err := sc.computeTasks(from, to)

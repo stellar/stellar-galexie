@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// helper for concise gap literals
-func gaps(gs ...[2]uint32) []gap {
-	out := make([]gap, 0, len(gs))
+// helper for concise Gap literals
+func gaps(gs ...[2]uint32) []Gap {
+	out := make([]Gap, 0, len(gs))
 	for _, g := range gs {
-		out = append(out, gap{Start: g[0], End: g[1]})
+		out = append(out, Gap{Start: g[0], End: g[1]})
 	}
 	return out
 }
@@ -36,7 +36,7 @@ func TestAggregator_AddAndFinalize_Success(t *testing.T) {
 
 	// gaps merged and accounted (20–25) + (26–30) → (20–30)
 	require.Len(t, rep.Gaps, 1)
-	assert.Equal(t, gap{Start: 20, End: 30}, rep.Gaps[0])
+	assert.Equal(t, Gap{Start: 20, End: 30}, rep.Gaps[0])
 
 	// TotalMissing = inclusive size of [20,30] = 11
 	assert.Equal(t, uint64(11), rep.TotalMissing)
@@ -46,7 +46,7 @@ func TestAggregator_Empty_ReturnsZeroReport(t *testing.T) {
 	a := newAggregator(nil)
 	rep := a.finalize()
 	// Exactly zeroed report
-	assert.Equal(t, report{}, rep)
+	assert.Equal(t, Report{}, rep)
 }
 
 func TestAggregator_gapsOnly_NoData_MinMax(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAggregator_gapsOnly_NoData_MinMax(t *testing.T) {
 
 	rep := a.finalize()
 	require.Len(t, rep.Gaps, 1)
-	assert.Equal(t, gap{Start: 5, End: 7}, rep.Gaps[0])
+	assert.Equal(t, Gap{Start: 5, End: 7}, rep.Gaps[0])
 	assert.Equal(t, uint64(3), rep.TotalMissing)
 	assert.Equal(t, uint32(0), rep.TotalFound)
 	assert.Equal(t, uint32(0), rep.MinFound)
@@ -88,12 +88,12 @@ func TestAggregator_IgnoresErroredResults(t *testing.T) {
 	require.Equal(t, uint32(9), rep.MaxFound)
 
 	require.Len(t, rep.Gaps, 1)
-	assert.Equal(t, gap{Start: 10, End: 12}, rep.Gaps[0])
+	assert.Equal(t, Gap{Start: 10, End: 12}, rep.Gaps[0])
 	assert.Equal(t, uint64(3), rep.TotalMissing)
 }
 
 func TestSortAndMergeGaps_UnsortedMergesCorrectly(t *testing.T) {
-	in := []gap{
+	in := []Gap{
 		{Start: 10, End: 20},
 		{Start: 5, End: 9},   // contiguous with [10,20]
 		{Start: 31, End: 31}, // contiguous with [18,30] after merging
@@ -102,18 +102,18 @@ func TestSortAndMergeGaps_UnsortedMergesCorrectly(t *testing.T) {
 	}
 	merged := sortAndMergeGaps(in)
 	require.Len(t, merged, 2)
-	assert.Equal(t, []gap{{Start: 5, End: 31}, {Start: 100, End: 110}}, merged)
+	assert.Equal(t, []Gap{{Start: 5, End: 31}, {Start: 100, End: 110}}, merged)
 }
 
 func TestSortAndMergeGaps_DisjointRemainSeparate(t *testing.T) {
-	in := []gap{
+	in := []Gap{
 		{Start: 1, End: 3},
 		{Start: 5, End: 6},
 		{Start: 8, End: 9},
 	}
 	merged := sortAndMergeGaps(in)
 	require.Len(t, merged, 3)
-	assert.Equal(t, []gap{
+	assert.Equal(t, []Gap{
 		{Start: 1, End: 3},
 		{Start: 5, End: 6},
 		{Start: 8, End: 9},
@@ -121,10 +121,10 @@ func TestSortAndMergeGaps_DisjointRemainSeparate(t *testing.T) {
 }
 
 func TestSortAndMergeGaps_SingleAndMaxUint32(t *testing.T) {
-	one := []gap{{Start: 42, End: 42}}
+	one := []Gap{{Start: 42, End: 42}}
 	assert.Equal(t, one, sortAndMergeGaps(one))
 
-	max := []gap{{Start: 0, End: ^uint32(0)}}
+	max := []Gap{{Start: 0, End: ^uint32(0)}}
 	m := sortAndMergeGaps(max)
 	require.Len(t, m, 1)
 	assert.Equal(t, uint32(0), m[0].Start)
@@ -132,7 +132,7 @@ func TestSortAndMergeGaps_SingleAndMaxUint32(t *testing.T) {
 }
 
 func TestSortAndMergeGaps_AlreadyMerged_NoChange(t *testing.T) {
-	in := []gap{
+	in := []Gap{
 		{Start: 1, End: 10},
 		{Start: 12, End: 20},
 	}

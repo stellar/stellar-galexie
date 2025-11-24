@@ -14,7 +14,7 @@ import (
 func TestScanTask(t *testing.T) {
 	type want struct {
 		high, low, count uint32
-		gaps             []gap
+		gaps             []Gap
 	}
 	cases := []struct {
 		name    string
@@ -26,19 +26,19 @@ func TestScanTask(t *testing.T) {
 			"full missing",
 			[][]string{{}},
 			task{low: 1, high: 100},
-			want{0, 0, 0, []gap{{1, 100}}},
+			want{0, 0, 0, []Gap{{1, 100}}},
 		},
 		{
-			"bottom-only gap",
+			"bottom-only Gap",
 			[][]string{{fpath(60, 100)}, {}},
 			task{low: 1, high: 100},
-			want{100, 60, 41, []gap{{1, 59}}},
+			want{100, 60, 41, []Gap{{1, 59}}},
 		},
 		{
 			"contiguous coverage",
 			[][]string{{fpath(50, 100)}, {fpath(1, 49)}, {}},
 			task{low: 1, high: 100},
-			want{100, 1, 100, []gap{}},
+			want{100, 1, 100, []Gap{}},
 		},
 	}
 
@@ -66,7 +66,7 @@ func TestScanTask(t *testing.T) {
 func TestScanTaskAdvanced(t *testing.T) {
 	type expected struct {
 		high, low, count uint32
-		gaps             []gap
+		gaps             []Gap
 	}
 
 	cases := []struct {
@@ -90,7 +90,7 @@ func TestScanTaskAdvanced(t *testing.T) {
 				high:  98,
 				low:   80,
 				count: (98 - 95 + 1) + (92 - 90 + 1) + (89 - 80 + 1),
-				gaps: []gap{
+				gaps: []Gap{
 					{Start: 99, End: 100}, // top
 					{Start: 93, End: 94},  // internal
 					{Start: 1, End: 79},   // bottom
@@ -102,16 +102,16 @@ func TestScanTaskAdvanced(t *testing.T) {
 			lpf:  1,
 			part: task{low: 1, high: 5},
 			batches: [][]string{
-				{spath(5)}, // first seen == high → no top gap
-				{spath(3)}, // internal gap [4,4]
-				{spath(1)}, // internal gap [2,2]; bottom covered
+				{spath(5)}, // first seen == high → no top Gap
+				{spath(3)}, // internal Gap [4,4]
+				{spath(1)}, // internal Gap [2,2]; bottom covered
 				{},         // end
 			},
 			want: expected{
 				high:  5,
 				low:   1,
 				count: 3, // three single-ledger files
-				gaps: []gap{
+				gaps: []Gap{
 					{Start: 4, End: 4},
 					{Start: 2, End: 2},
 				},
@@ -122,15 +122,15 @@ func TestScanTaskAdvanced(t *testing.T) {
 			lpf:  64,
 			part: task{low: 1, high: 100},
 			batches: [][]string{
-				{spath(100), fpath(90, 95)}, // page 1: top covered; internal gap [96,99]
+				{spath(100), fpath(90, 95)}, // page 1: top covered; internal Gap [96,99]
 				{fpath(80, 89)},             // page 2
-				{},                          // end → bottom gap [1,79]
+				{},                          // end → bottom Gap [1,79]
 			},
 			want: expected{
 				high:  100,
 				low:   80,
 				count: 1 + (95 - 90 + 1) + (89 - 80 + 1),
-				gaps: []gap{
+				gaps: []Gap{
 					{Start: 96, End: 99}, // internal
 					{Start: 1, End: 79},  // bottom
 				},
