@@ -105,8 +105,12 @@ func DefineCommands() *cobra.Command {
 			}
 
 			outputFlag := cmd.Flags().Lookup("output-file")
-			viper.BindPFlag(outputFlag.Name, outputFlag)
-			viper.BindEnv(outputFlag.Name, strutils.KebabToConstantCase(outputFlag.Name))
+			if err := viper.BindPFlag(outputFlag.Name, outputFlag); err != nil {
+				return err
+			}
+			if err := viper.BindEnv(outputFlag.Name, strutils.KebabToConstantCase(outputFlag.Name)); err != nil {
+				return err
+			}
 			outputFile := viper.GetString(outputFlag.Name)
 
 			if outputFile != "" {

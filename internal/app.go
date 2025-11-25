@@ -366,7 +366,7 @@ func (a *App) export(ctx context.Context, cancel context.CancelFunc) error {
 	return nil
 }
 
-const defaultTaskSize = uint32(10000)
+const defaultTaskSize = uint32(100_000)
 
 // TODO: make this configurable
 const defaultNumWorkers = 32
