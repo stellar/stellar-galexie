@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stellar/go-stellar-sdk/support/strutils"
 
-	galexie "github.com/stellar/stellar-galexie/internal"
+	"github.com/stellar/stellar-galexie/internal"
 )
 
 var (
