@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stellar/go/historyarchive"
-	"github.com/stellar/go/network"
+	"github.com/stellar/go-stellar-sdk/historyarchive"
+	"github.com/stellar/go-stellar-sdk/network"
 
 	"github.com/stretchr/testify/require"
 )

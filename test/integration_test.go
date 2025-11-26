@@ -25,13 +25,13 @@ import (
 
 	"github.com/fsouza/fake-gcs-server/fakestorage"
 
-	"github.com/stellar/go/historyarchive"
-	"github.com/stellar/go/ingest"
-	"github.com/stellar/go/ingest/ledgerbackend"
-	"github.com/stellar/go/support/compressxdr"
-	"github.com/stellar/go/support/datastore"
-	"github.com/stellar/go/support/storage"
-	"github.com/stellar/go/xdr"
+	"github.com/stellar/go-stellar-sdk/historyarchive"
+	"github.com/stellar/go-stellar-sdk/ingest"
+	"github.com/stellar/go-stellar-sdk/ingest/ledgerbackend"
+	"github.com/stellar/go-stellar-sdk/support/compressxdr"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/storage"
+	"github.com/stellar/go-stellar-sdk/xdr"
 
 	"github.com/stellar/stellar-galexie/cmd"
 	galexie "github.com/stellar/stellar-galexie/internal"

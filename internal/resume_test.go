@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stellar/go/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 )
 
 func TestResumability(t *testing.T) {

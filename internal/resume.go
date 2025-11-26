@@ -6,7 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/stellar/go/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 )
 
 // findResumeLedger determines the first missing ledger sequence within the requested range [start, end].

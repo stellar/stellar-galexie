@@ -9,8 +9,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/stellar/go/support/compressxdr"
-	"github.com/stellar/go/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/compressxdr"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 )
 
 // Uploader is responsible for uploading data to a storage destination.

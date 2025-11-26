@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/stellar/go/support/datastore"
-	"github.com/stellar/go/xdr"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
+	"github.com/stellar/go-stellar-sdk/xdr"
 )
 
 func TestNewLedgerMetaArchiveFromXDR(t *testing.T) {
