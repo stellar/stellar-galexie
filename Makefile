@@ -8,7 +8,7 @@ DOCKER_IMAGE := stellar/stellar-galexie
 
 docker-build:
 	$(SUDO) docker build --platform linux/amd64 --pull --label org.opencontainers.image.created="$(BUILD_DATE)" \
-    --build-arg GOFLAGS="-ldflags=-X=github.com/stellar/go-stellar-sdk/internal.version=$(VERSION)" \
+    --build-arg GOFLAGS="-ldflags=-X=github.com/stellar/stellar-galexie/internal.version=$(VERSION)" \
 $(if $(STELLAR_CORE_VERSION), --build-arg STELLAR_CORE_VERSION=$(STELLAR_CORE_VERSION)) \
 	-f docker/Dockerfile \
 	-t $(DOCKER_IMAGE):$(VERSION) .
