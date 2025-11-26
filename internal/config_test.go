@@ -12,8 +12,6 @@ import (
 )
 
 func TestNewConfig(t *testing.T) {
-	ctx := context.Background()
-
 	mockArchive := &historyarchive.MockArchive{}
 	mockArchive.On("GetLatestLedgerSequence").Return(uint32(5), nil).Once()
 	mockArchive.On("GetCheckpointManager").
@@ -24,14 +22,15 @@ func TestNewConfig(t *testing.T) {
 		RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: "test/test.toml", Mode: Append}, nil)
 
 	require.NoError(t, err)
-	err = config.ValidateAndSetLedgerRange(ctx, mockArchive)
+	err = config.ValidateLedgerRange(mockArchive)
 	require.NoError(t, err)
 	require.Equal(t, config.StellarCoreConfig.Network, "pubnet")
 	require.Equal(t, config.DataStoreConfig.Type, "ABC")
 	require.Equal(t, config.DataStoreConfig.Schema.FilesPerPartition, uint32(1))
 	require.Equal(t, config.DataStoreConfig.Schema.LedgersPerFile, uint32(3))
 	require.Equal(t, config.UserAgent, "galexie")
-	require.True(t, config.Resumable())
+	require.True(t, config.Mode.Resumable())
+	require.False(t, config.Mode.RequiresBoundedRange())
 	url, ok := config.DataStoreConfig.Params["destination_bucket_path"]
 	require.True(t, ok)
 	require.Equal(t, url, "your-bucket-name/subpath/testnet")
@@ -70,7 +69,7 @@ func TestResumeDisabled(t *testing.T) {
 	config, err := NewConfig(
 		RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: "test/test.toml", Mode: ScanFill}, nil)
 	require.NoError(t, err)
-	require.False(t, config.Resumable())
+	require.False(t, config.Mode.Resumable())
 }
 
 func TestInvalidConfigFilePath(t *testing.T) {
@@ -197,7 +196,7 @@ func TestInvalidCaptiveCoreTomlPath(t *testing.T) {
 	require.ErrorContains(t, err, "Failed to load captive-core-toml-path file")
 }
 
-func TestValidateStartAndEndLedger(t *testing.T) {
+func TestValidateLedgerRangeBoundedMode(t *testing.T) {
 	latestNetworkLedger := uint32(20000)
 	latestNetworkLedgerPadding := historyarchive.DefaultCheckpointFrequency * 2
 
@@ -206,52 +205,37 @@ func TestValidateStartAndEndLedger(t *testing.T) {
 		startLedger uint32
 		endLedger   uint32
 		errMsg      string
-		mode        Mode
 		mockHas     bool
 	}{
 		{
 			name:        "End ledger same as latest ledger",
 			startLedger: 512,
 			endLedger:   512,
-			mode:        ScanFill,
 			errMsg:      "invalid end value, must be greater than start",
-			mockHas:     false,
 		},
 		{
 			name:        "End ledger greater than start ledger",
 			startLedger: 512,
 			endLedger:   600,
-			mode:        ScanFill,
 			errMsg:      "",
 			mockHas:     true,
 		},
 		{
-			name:        "No end ledger provided, append mode, no error",
+			name:        "No end ledger provided",
 			startLedger: 512,
 			endLedger:   0,
-			mode:        Append,
-			errMsg:      "",
-			mockHas:     true,
-		},
-		{
-			name:        "No end ledger provided, scan-and-fill error",
-			startLedger: 512,
-			endLedger:   0,
-			mode:        ScanFill,
 			errMsg:      "invalid end value, unbounded mode not supported, end must be greater than start.",
 		},
 		{
 			name:        "End ledger before start ledger",
 			startLedger: 512,
 			endLedger:   2,
-			mode:        ScanFill,
 			errMsg:      "invalid end value, must be greater than start",
 		},
 		{
 			name:        "End ledger exceeds latest ledger",
 			startLedger: 512,
 			endLedger:   latestNetworkLedger + latestNetworkLedgerPadding + 1,
-			mode:        ScanFill,
 			mockHas:     true,
 			errMsg: fmt.Sprintf("end %d exceeds latest network ledger %d",
 				latestNetworkLedger+latestNetworkLedgerPadding+1, latestNetworkLedger+latestNetworkLedgerPadding),
@@ -260,95 +244,126 @@ func TestValidateStartAndEndLedger(t *testing.T) {
 			name:        "Start ledger 0",
 			startLedger: 0,
 			endLedger:   2,
-			mode:        ScanFill,
 			errMsg:      "invalid start value, must be greater than one.",
 		},
 		{
 			name:        "Start ledger 1",
 			startLedger: 1,
 			endLedger:   2,
-			mode:        ScanFill,
 			errMsg:      "invalid start value, must be greater than one.",
 		},
 		{
 			name:        "Start ledger exceeds latest ledger",
 			startLedger: latestNetworkLedger + latestNetworkLedgerPadding + 1,
 			endLedger:   latestNetworkLedger + latestNetworkLedgerPadding + 2,
-			mode:        ScanFill,
-			mockHas:     true,
-			errMsg: fmt.Sprintf("start %d exceeds latest network ledger %d",
-				latestNetworkLedger+latestNetworkLedgerPadding+1, latestNetworkLedger+latestNetworkLedgerPadding),
-		},
-		{
-			name:        "Replace: End ledger same as start ledger (error)",
-			startLedger: 512,
-			endLedger:   512,
-			mode:        Replace,
-			errMsg:      "invalid end value, must be greater than start",
-			mockHas:     false,
-		},
-		{
-			name:        "Replace: End ledger greater than start ledger (pass)",
-			startLedger: 512,
-			endLedger:   600,
-			mode:        Replace,
-			errMsg:      "",
-			mockHas:     true,
-		},
-		{
-			name:        "Replace: No end ledger provided (error)",
-			startLedger: 512,
-			endLedger:   0,
-			mode:        Replace,
-			errMsg:      "invalid end value, unbounded mode not supported, end must be greater than start.",
-		},
-		{
-			name:        "Replace: End ledger before start ledger (error)",
-			startLedger: 512,
-			endLedger:   2,
-			mode:        Replace,
-			errMsg:      "invalid end value, must be greater than start",
-		},
-		{
-			name:        "Replace: Start ledger 0 (error)",
-			startLedger: 0,
-			endLedger:   2,
-			mode:        Replace,
-			errMsg:      "invalid start value, must be greater than one.",
-		},
-		{
-			name:        "Replace: Start ledger exceeds latest ledger (error)",
-			startLedger: latestNetworkLedger + latestNetworkLedgerPadding + 1,
-			endLedger:   latestNetworkLedger + latestNetworkLedgerPadding + 2,
-			mode:        Replace,
 			mockHas:     true,
 			errMsg: fmt.Sprintf("start %d exceeds latest network ledger %d",
 				latestNetworkLedger+latestNetworkLedgerPadding+1, latestNetworkLedger+latestNetworkLedgerPadding),
 		},
 	}
 
-	ctx := context.Background()
+	for _, mode := range []Mode{ScanFill, Replace, DetectGaps} {
+		mockArchive := &historyarchive.MockArchive{}
+		mockArchive.On("GetLatestLedgerSequence").Return(latestNetworkLedger, nil)
+		mockArchive.On("GetCheckpointManager").
+			Return(historyarchive.NewCheckpointManager(
+				historyarchive.DefaultCheckpointFrequency))
+
+		mockedHasCtr := 0
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("%s/%s", mode.Name(), tt.name), func(t *testing.T) {
+				if tt.mockHas {
+					mockedHasCtr++
+				}
+				config := Config{
+					StartLedger: tt.startLedger,
+					EndLedger:   tt.endLedger,
+					Mode:        mode,
+				}
+				err := config.ValidateLedgerRange(mockArchive)
+				if tt.errMsg != "" {
+					require.Error(t, err)
+					require.Equal(t, tt.errMsg, err.Error())
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		}
+		mockArchive.AssertExpectations(t)
+	}
+
+}
+
+func TestValidateLedgerRangeUnboundedMode(t *testing.T) {
+	const latestNetworkLedger uint32 = 20000
+	latestWithPadding := latestNetworkLedger + historyarchive.DefaultCheckpointFrequency*2
+
 	mockArchive := &historyarchive.MockArchive{}
 	mockArchive.On("GetLatestLedgerSequence").Return(latestNetworkLedger, nil)
 	mockArchive.On("GetCheckpointManager").
-		Return(historyarchive.NewCheckpointManager(
-			historyarchive.DefaultCheckpointFrequency))
+		Return(historyarchive.NewCheckpointManager(historyarchive.DefaultCheckpointFrequency))
 
-	mockedHasCtr := 0
+	type testCase struct {
+		name        string
+		startLedger uint32
+		endLedger   uint32
+		wantErr     string
+	}
+
+	tests := []testCase{
+		{
+			name:        "unbounded end with valid start (ok)",
+			startLedger: 512,
+			endLedger:   0, // unbounded
+			wantErr:     "",
+		},
+		{
+			name:        "unbounded end with start 0 (error)",
+			startLedger: 0,
+			endLedger:   0,
+			wantErr:     "invalid start value, must be greater than one.",
+		},
+		{
+			name:        "unbounded end with start > latest (error)",
+			startLedger: latestWithPadding + 1,
+			endLedger:   0,
+			wantErr: fmt.Sprintf(
+				"start %d exceeds latest network ledger %d",
+				latestWithPadding+1,
+				latestWithPadding,
+			),
+		},
+		{
+			name:        "bounded end with start < end (ok)",
+			startLedger: 512,
+			endLedger:   600,
+			wantErr:     "",
+		},
+		{
+			name:        "bounded end equal to start (error)",
+			startLedger: 512,
+			endLedger:   512,
+			wantErr:     "invalid end value, must be greater than start",
+		},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockHas {
-				mockedHasCtr++
+			cfg := Config{
+				StartLedger: tt.startLedger,
+				EndLedger:   tt.endLedger,
+				Mode:        Append,
 			}
-			config, err := NewConfig(
-				RuntimeSettings{StartLedger: tt.startLedger, EndLedger: tt.endLedger, ConfigFilePath: "test/validate_start_end.toml", Mode: tt.mode}, nil)
-			require.NoError(t, err)
-			err = config.ValidateAndSetLedgerRange(ctx, mockArchive)
-			if tt.errMsg != "" {
+
+			err := cfg.ValidateLedgerRange(mockArchive)
+
+			if tt.wantErr != "" {
 				require.Error(t, err)
-				require.Equal(t, tt.errMsg, err.Error())
+				require.Equal(t, tt.wantErr, err.Error())
 			} else {
 				require.NoError(t, err)
+				// sanity check: start should be within allowed network+padding range
+				require.GreaterOrEqual(t, cfg.StartLedger, uint32(2))
+				require.LessOrEqual(t, cfg.StartLedger, latestWithPadding)
 			}
 		})
 	}
@@ -406,17 +421,8 @@ func TestAdjustedLedgerRangeBoundedMode(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
-	mockArchive := &historyarchive.MockArchive{}
-	mockArchive.On("GetLatestLedgerSequence").Return(uint32(500), nil)
-	mockArchive.On("GetCheckpointManager").
-		Return(historyarchive.NewCheckpointManager(
-			historyarchive.DefaultCheckpointFrequency))
-
-	modes := []Mode{ScanFill, Replace}
-
 	for _, tt := range tests {
-		for _, mode := range modes {
+		for _, mode := range []Mode{ScanFill, Replace, DetectGaps} {
 			testName := fmt.Sprintf("%s_%s", tt.name, mode.Name())
 			t.Run(testName, func(t *testing.T) {
 				config, err := NewConfig(
@@ -424,14 +430,12 @@ func TestAdjustedLedgerRangeBoundedMode(t *testing.T) {
 					RuntimeSettings{StartLedger: tt.start, EndLedger: tt.end, ConfigFilePath: tt.configFile, Mode: mode}, nil)
 
 				require.NoError(t, err)
-				err = config.ValidateAndSetLedgerRange(ctx, mockArchive)
-				require.NoError(t, err)
+				config.adjustLedgerRange()
 				require.EqualValues(t, tt.expectedStart, config.StartLedger)
 				require.EqualValues(t, tt.expectedEnd, config.EndLedger)
 			})
 		}
 	}
-	mockArchive.AssertExpectations(t)
 }
 
 func TestAdjustedLedgerRangeUnBoundedMode(t *testing.T) {
@@ -476,25 +480,15 @@ func TestAdjustedLedgerRangeUnBoundedMode(t *testing.T) {
 			expectedEnd:   0,
 		},
 	}
-
-	ctx := context.Background()
-
-	mockArchive := &historyarchive.MockArchive{}
-	mockArchive.On("GetLatestLedgerSequence").Return(uint32(500), nil)
-	mockArchive.On("GetCheckpointManager").
-		Return(historyarchive.NewCheckpointManager(
-			historyarchive.DefaultCheckpointFrequency))
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config, err := NewConfig(
 				RuntimeSettings{StartLedger: tt.start, EndLedger: tt.end, ConfigFilePath: tt.configFile, Mode: Append}, nil)
 			require.NoError(t, err)
-			err = config.ValidateAndSetLedgerRange(ctx, mockArchive)
-			require.NoError(t, err)
+			config.adjustLedgerRange()
+
 			require.EqualValues(t, tt.expectedStart, config.StartLedger)
 			require.EqualValues(t, tt.expectedEnd, config.EndLedger)
 		})
 	}
-	mockArchive.AssertExpectations(t)
 }
