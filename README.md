@@ -11,4 +11,4 @@ Galaxie is a simple, lightweight application that bundles Stellar network data, 
   A Step-by-step guide to install, configure and run Galexie: [Admin Guide](https://developers.stellar.org/docs/data/galexie/admin_guide)
 
 - **Developer Guide**\
-  Documentation for developers working with or contributing to Galexie: [Developer Guide](https://github.com/stellar/go/blob/master/services/galexie/DEVELOPER_GUIDE.md)
+  Documentation for developers working with or contributing to Galexie: [Developer Guide](https://github.com/stellar/stellar-galexie/blob/master/DEVELOPER_GUIDE.md)

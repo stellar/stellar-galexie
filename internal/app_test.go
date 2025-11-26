@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stellar/go/support/compressxdr"
-	"github.com/stellar/go/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/compressxdr"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 )
 
 func TestApplyResumeHasStartError(t *testing.T) {

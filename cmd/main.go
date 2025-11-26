@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"github.com/stellar/go/support/strutils"
+	"github.com/stellar/go-stellar-sdk/support/strutils"
 
-	"github.com/stellar/stellar-galexie/internal"
+	galexie "github.com/stellar/stellar-galexie/internal"
 )
 
 var (

@@ -3,7 +3,7 @@ package scan
 import (
 	"sort"
 
-	"github.com/stellar/go/support/log"
+	"github.com/stellar/go-stellar-sdk/support/log"
 )
 
 // aggregator accumulates ledger scan results and merges contiguous gap ranges.
