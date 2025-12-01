@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/stellar/go/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 )
 
 // scanTask walks a ledger range in descending order and records gaps.

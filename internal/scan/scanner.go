@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stellar/go/support/datastore"
-	"github.com/stellar/go/support/log"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
+	"github.com/stellar/go-stellar-sdk/support/log"
 )
 
 // report represents the aggregated outcome of a full ledger scan.
