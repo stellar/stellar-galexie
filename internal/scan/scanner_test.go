@@ -127,8 +127,118 @@ func newMockScanner(t *testing.T, numWorkers, taskSize uint32) *Scanner {
 	return sc
 }
 
-func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {
-	t.Run("lpf=1", func(t *testing.T) {
+func TestRun_HappyPath_WithGaps(t *testing.T) {
+	t.Run("ledgers_per_file=1_with_gap", func(t *testing.T) {
+		{
+			sc := newMockScanner(t, 3, 10)
+			sc.schema.LedgersPerFile = 1
+
+			var total atomic.Uint64
+			missingStart, missingEnd := uint32(5), uint32(7)
+
+			sc.scan = func(ctx context.Context, p task) (result, error) {
+				low := max(2, p.low)
+				high := p.high
+				if high < low {
+					return result{low: p.low, high: p.high}, nil
+				}
+
+				presentCount := uint64(high - low + 1)
+				var gs []Gap
+
+				// subtract missing range overlap
+				if high >= missingStart && low <= missingEnd {
+					gStart := max(low, missingStart)
+					gEnd := min(high, missingEnd)
+					gs = gaps([2]uint32{gStart, gEnd})
+					presentCount -= uint64(gEnd - gStart + 1)
+				}
+
+				total.Add(presentCount)
+				return result{
+					low:   low,
+					high:  high,
+					count: uint32(presentCount),
+					gaps:  gs,
+				}, nil
+			}
+
+			report, err := sc.Run(context.Background(), 0, 25)
+			require.NoError(t, err)
+
+			assert.Equal(t, uint64(24-3), total.Load())
+
+			expected := Report{
+				TotalLedgersFound:   24 - 3,
+				TotalLedgersMissing: 3,
+				MinSequenceFound:    2, // scanner normalizes the range to start at 2 since ledgers start from 2
+				MaxSequenceFound:    25,
+				Gaps:                gaps([2]uint32{5, 7}),
+			}
+
+			assert.Equal(t, expected, report)
+		}
+	})
+
+	t.Run("ledgers_per_file>1_with_gap", func(t *testing.T) {
+		{
+			sc := newMockScanner(t, 3, 10)
+			sc.schema.LedgersPerFile = 10
+
+			var total atomic.Uint64
+			// Missing the entire second file: 10–19
+			missingStart := uint32(10)
+			missingEnd := uint32(19)
+
+			sc.scan = func(ctx context.Context, p task) (result, error) {
+				low := max(2, p.low)
+				high := p.high
+				if high < low {
+					return result{low: p.low, high: p.high}, nil
+				}
+
+				presentCount := uint64(high - low + 1)
+				var gs []Gap
+
+				// subtract missing range overlap
+				if high >= missingStart && low <= missingEnd {
+					gStart := min(low, missingStart)
+					gEnd := min(high, missingEnd)
+					gs = gaps([2]uint32{gStart, gEnd})
+					presentCount -= uint64(gEnd - gStart + 1)
+				}
+
+				total.Add(presentCount)
+				return result{
+					low:   low,
+					high:  high,
+					count: uint32(presentCount),
+					gaps:  gs,
+				}, nil
+			}
+
+			report, err := sc.Run(context.Background(), 1, 25)
+			require.NoError(t, err)
+
+			// Full span = 28 ledgers (2–29)
+			// Missing block = 10 ledgers (11–20)
+			assert.Equal(t, uint64(28-10), total.Load())
+
+			expected := Report{
+				TotalLedgersFound:   28 - 10,
+				TotalLedgersMissing: 10,
+				MinSequenceFound:    2, // scanner normalizes the range to start at 2 since ledgers start from 2
+				MaxSequenceFound:    29,
+				Gaps:                gaps([2]uint32{10, 19}),
+			}
+
+			assert.Equal(t, expected, report)
+		}
+	})
+}
+
+func TestRun_HappyPath_NoGaps(t *testing.T) {
+	t.Run("ledgers_per_file=1_no_gap", func(t *testing.T) {
 		sc := newMockScanner(t, 3, 10)
 		sc.schema.LedgersPerFile = 1
 
@@ -136,33 +246,49 @@ func TestRun_HappyPath_CompletesAndCounts(t *testing.T) {
 		sc.scan = func(ctx context.Context, p task) (result, error) {
 			cnt := p.high - p.low + 1
 			total.Add(uint64(cnt))
-			return result{count: cnt}, nil
+			return result{low: p.low, high: p.high, count: cnt}, nil
 		}
 
-		_, err := sc.Run(context.Background(), 1, 25)
+		report, err := sc.Run(context.Background(), 0, 25)
 		require.NoError(t, err)
 
 		// With 1 ledger per file we scan 24 ledgers (2 - 25).
 		assert.Equal(t, uint64(24), total.Load())
+
+		expectedReport := Report{
+			TotalLedgersFound:   24,
+			TotalLedgersMissing: 0,
+			MinSequenceFound:    2,
+			MaxSequenceFound:    25,
+		}
+		assert.Equal(t, expectedReport, report)
 	})
 
-	t.Run("lpf>1", func(t *testing.T) {
+	t.Run("ledgers_per_file>1_no_gap", func(t *testing.T) {
 		// Example: 10 ledgers per file.
 		sc := newMockScanner(t, 3, 10)
 		sc.schema.LedgersPerFile = 10
 
 		var total atomic.Uint64
 		sc.scan = func(ctx context.Context, p task) (result, error) {
-			cnt := p.high - p.low + 1
+			cnt := p.high - max(2, p.low) + 1
 			total.Add(uint64(cnt))
-			return result{count: cnt}, nil
+			return result{low: p.low, high: p.high, count: cnt}, nil
 		}
 
-		_, err := sc.Run(context.Background(), 1, 25)
+		report, err := sc.Run(context.Background(), 1, 25)
 		require.NoError(t, err)
 
 		// With 10 ledger per file we scan 28 ledgers (2 - 29).
 		assert.Equal(t, uint64(28), total.Load())
+
+		expectedReport := Report{
+			TotalLedgersFound:   28,
+			TotalLedgersMissing: 0,
+			MinSequenceFound:    2,
+			MaxSequenceFound:    29,
+		}
+		assert.Equal(t, expectedReport, report)
 	})
 }
 
@@ -201,9 +327,9 @@ func TestScannerRun_ReturnsFirstErrorAndPartialReport(t *testing.T) {
 	require.ErrorIs(t, gotErr, errScan)
 
 	// We expect only the first task's data to be aggregated.
-	assert.EqualValues(t, rep.TotalFound, 8)
-	assert.EqualValues(t, rep.MinFound, 2)
-	assert.EqualValues(t, rep.MaxFound, 9)
+	assert.EqualValues(t, 8, rep.TotalLedgersFound)
+	assert.EqualValues(t, 2, rep.MinSequenceFound)
+	assert.EqualValues(t, 9, rep.MaxSequenceFound)
 	assert.Len(t, rep.Gaps, 0)
 }
 
@@ -294,8 +420,8 @@ func TestRun_CallsScanForEachTask(t *testing.T) {
 
 	// 1..30 with taskSize=10 and ledgersPerFile = 10 => 4 task (2-9, 10-19, 20-29, 30-39)
 	assert.Equal(t, int32(4), calls.Load())
-	assert.Equal(t, minN.Load(), uint32(2))
-	assert.Equal(t, maxN.Load(), uint32(39))
+	assert.Equal(t, uint32(2), minN.Load())
+	assert.Equal(t, uint32(39), maxN.Load())
 }
 
 func TestRun_DataStoreError(t *testing.T) {
@@ -333,15 +459,15 @@ func TestRun_ShortCircuit_NoLedgerFiles(t *testing.T) {
 		return result{}, nil
 	}
 
-	from, to := uint32(1), uint32(100)
+	from, to := uint32(2), uint32(100)
 
 	rep, err := sc.Run(ctx, from, to)
 	require.NoError(t, err)
 
 	require.Len(t, rep.Gaps, 1)
 	assert.Equal(t, Gap{Start: from, End: to}, rep.Gaps[0])
-	assert.Equal(t, uint32(0), rep.TotalFound)
-	assert.Equal(t, uint64(to-from+1), rep.TotalMissing)
+	assert.Equal(t, uint32(0), rep.TotalLedgersFound)
+	assert.Equal(t, uint32(99), rep.TotalLedgersMissing)
 
 	ds.AssertExpectations(t)
 }

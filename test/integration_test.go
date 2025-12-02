@@ -300,36 +300,49 @@ func (s *GalexieTestSuite) TestDetectGaps() {
 	require.Equal(uint32(20), resp.ScanTo)
 
 	// Since we only filled 4–8, we expect missing ranges before and after.
-	require.Equal(len(resp.Report.Gaps), 2)
-	require.Equal(resp.Report.TotalMissing, uint64(14))
-	require.Equal(resp.Report.TotalFound, uint32(5))
-	require.Equal(resp.Report.Gaps[0], scan.Gap{
-		Start: 2,
-		End:   3,
-	})
-	require.Equal(resp.Report.Gaps[1], scan.Gap{
-		Start: 9,
-		End:   20,
-	})
+	expectedReport := scan.Report{
+		Gaps: []scan.Gap{
+			{
+				Start: 2,
+				End:   3,
+			},
+			{
+				Start: 9,
+				End:   20,
+			},
+		},
+		TotalLedgersFound:   5,
+		TotalLedgersMissing: 14,
+		MinSequenceFound:    4,
+		MaxSequenceFound:    8,
+	}
+	require.Equal(expectedReport, resp.Report)
+
 }
 
 func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
 	require := s.Require()
 
+	// Use a config where ledgers_per_file = 8 so ranges are aligned to
+	// 8-ledger file boundaries.
+	configPath := filepath.Join("data", "integration_config_8lpf.toml")
+
 	rootCmd := cmd.DefineCommands()
 
 	// Run a small scan-and-fill to ensure some ledgers exist.
+	// With ledgers_per_file = 8, a requested range of 4–8 will be aligned
+	// to the file boundary and actually fill 2–7, 8-15.
 	rootCmd.SetArgs([]string{
 		"scan-and-fill",
 		"--start", "4",
 		"--end", "8",
-		"--config-file", s.tempConfigFile,
+		"--config-file", configPath,
 	})
 	var errBuf, outBuf bytes.Buffer
 	rootCmd.SetErr(&errBuf)
 	rootCmd.SetOut(&outBuf)
 	err := rootCmd.ExecuteContext(s.ctx)
-	require.NoError(err)
+	require.NoError(err, errBuf.String())
 
 	// Now run detect-gaps over a wider range and write JSON to a file.
 	tmpDir := s.T().TempDir()
@@ -339,7 +352,7 @@ func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
 		"detect-gaps",
 		"--start", "2",
 		"--end", "20",
-		"--config-file", s.tempConfigFile,
+		"--config-file", configPath,
 		"--output-file", reportPath,
 	})
 	errBuf.Reset()
@@ -357,13 +370,19 @@ func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
 	var out galexie.DetectGapsOutput
 	require.NoError(json.Unmarshal(data, &out))
 
-	// Basic assertions on content.
+	expectedReport := scan.Report{
+		Gaps: []scan.Gap{{
+			Start: 16,
+			End:   23,
+		}},
+		TotalLedgersFound:   14,
+		TotalLedgersMissing: 8,
+		MinSequenceFound:    2,
+		MaxSequenceFound:    15,
+	}
 	require.Equal(uint32(2), out.ScanFrom)
 	require.Equal(uint32(20), out.ScanTo)
-
-	// Should have at least one gap, since we only filled 4–8.
-	require.Greater(len(out.Report.Gaps), 0)
-	require.Greater(out.Report.TotalMissing, uint64(0))
+	require.Equal(expectedReport, out.Report)
 }
 
 func (s *GalexieTestSuite) SetupTest() {

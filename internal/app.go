@@ -417,15 +417,15 @@ func (a *App) runDetectGaps(ctx context.Context, reportWriter io.Writer) error {
 	fields := log.F{
 		"scan_from":     from,
 		"scan_to":       to,
-		"min_found":     rep.MinFound,
-		"max_found":     rep.MaxFound,
-		"total_found":   rep.TotalFound,
-		"total_missing": rep.TotalMissing,
+		"min_found":     rep.MinSequenceFound,
+		"max_found":     rep.MaxSequenceFound,
+		"total_found":   rep.TotalLedgersFound,
+		"total_missing": rep.TotalLedgersMissing,
 		"gaps_count":    len(rep.Gaps),
 		"duration":      dur.String(),
 	}
 
-	if rep.TotalMissing > 0 {
+	if rep.TotalLedgersMissing > 0 {
 		logger.WithFields(fields).Warn("detect-gaps completed with gaps")
 	} else {
 		logger.WithFields(fields).Info("detect-gaps completed successfully")

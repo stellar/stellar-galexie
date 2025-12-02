@@ -12,33 +12,44 @@ import (
 )
 
 func TestScanTask(t *testing.T) {
-	type want struct {
-		high, low, count uint32
-		gaps             []Gap
-	}
 	cases := []struct {
 		name    string
 		batches [][]string
 		part    task
-		want    want
+		want    result
 	}{
 		{
 			"full missing",
 			[][]string{{}},
 			task{low: 1, high: 100},
-			want{0, 0, 0, []Gap{{1, 100}}},
+			result{
+				gaps:  []Gap{{1, 100}},
+				low:   0,
+				high:  0,
+				count: 0,
+			},
 		},
 		{
 			"bottom-only Gap",
 			[][]string{{fpath(60, 100)}, {}},
-			task{low: 1, high: 100},
-			want{100, 60, 41, []Gap{{1, 59}}},
+			task{low: 2, high: 100},
+			result{
+				gaps:  []Gap{{2, 59}},
+				low:   60,
+				high:  100,
+				count: 41,
+			},
 		},
 		{
 			"contiguous coverage",
 			[][]string{{fpath(50, 100)}, {fpath(1, 49)}, {}},
 			task{low: 1, high: 100},
-			want{100, 1, 100, []Gap{}},
+			result{
+				gaps:  []Gap{},
+				low:   1,
+				high:  100,
+				count: 100,
+			},
 		},
 	}
 
@@ -53,10 +64,7 @@ func TestScanTask(t *testing.T) {
 
 			res, err := scanTask(ctx, c.part, ds, schema)
 			require.NoError(t, err)
-			assert.Equal(t, c.want.high, res.high)
-			assert.Equal(t, c.want.low, res.low)
-			assert.Equal(t, c.want.count, res.count)
-			assert.Equal(t, c.want.gaps, res.gaps)
+			assert.Equal(t, c.want, res)
 
 			ds.AssertExpectations(t)
 		})
@@ -64,53 +72,47 @@ func TestScanTask(t *testing.T) {
 }
 
 func TestScanTaskAdvanced(t *testing.T) {
-	type expected struct {
-		high, low, count uint32
-		gaps             []Gap
-	}
-
 	cases := []struct {
 		name    string
 		lpf     uint32
 		part    task
 		batches [][]string // pages returned by ListFilePaths in order
-		want    expected
+		want    result
 	}{
 		{
 			name: "Top+Internal+Bottom gaps",
 			lpf:  64,
-			part: task{low: 1, high: 100},
+			part: task{low: 5, high: 100},
 			batches: [][]string{
 				{fpath(95, 98)}, // page 1
 				{fpath(90, 92)}, // page 2
 				{fpath(80, 89)}, // page 3
-				{},              // page 4 (no more)
+				{},
 			},
-			want: expected{
+			want: result{
 				high:  98,
 				low:   80,
-				count: (98 - 95 + 1) + (92 - 90 + 1) + (89 - 80 + 1),
+				count: 17, //[98,95] + [92,90] + [89,80],
 				gaps: []Gap{
 					{Start: 99, End: 100}, // top
 					{Start: 93, End: 94},  // internal
-					{Start: 1, End: 79},   // bottom
+					{Start: 5, End: 79},   // bottom
 				},
 			},
 		},
 		{
 			name: "Single-ledger-per-file with mixed gaps",
 			lpf:  1,
-			part: task{low: 1, high: 5},
+			part: task{low: 2, high: 5},
 			batches: [][]string{
 				{spath(5)}, // first seen == high → no top Gap
 				{spath(3)}, // internal Gap [4,4]
-				{spath(1)}, // internal Gap [2,2]; bottom covered
-				{},         // end
+				{},         // gap [2,2]
 			},
-			want: expected{
+			want: result{
 				high:  5,
-				low:   1,
-				count: 3, // three single-ledger files
+				low:   3,
+				count: 2, // ledger files 2 and 4 missing
 				gaps: []Gap{
 					{Start: 4, End: 4},
 					{Start: 2, End: 2},
@@ -120,19 +122,19 @@ func TestScanTaskAdvanced(t *testing.T) {
 		{
 			name: "Multiple files in one page",
 			lpf:  64,
-			part: task{low: 1, high: 100},
+			part: task{low: 2, high: 100},
 			batches: [][]string{
 				{spath(100), fpath(90, 95)}, // page 1: top covered; internal Gap [96,99]
 				{fpath(80, 89)},             // page 2
 				{},                          // end → bottom Gap [1,79]
 			},
-			want: expected{
+			want: result{
 				high:  100,
 				low:   80,
 				count: 1 + (95 - 90 + 1) + (89 - 80 + 1),
 				gaps: []Gap{
 					{Start: 96, End: 99}, // internal
-					{Start: 1, End: 79},  // bottom
+					{Start: 2, End: 79},  // bottom
 				},
 			},
 		},
@@ -152,11 +154,7 @@ func TestScanTaskAdvanced(t *testing.T) {
 
 			res, err := scanTask(ctx, c.part, ds, schema)
 			require.NoError(t, err)
-
-			assert.Equal(t, c.want.high, res.high, "high watermark")
-			assert.Equal(t, c.want.low, res.low, "low watermark")
-			assert.Equal(t, c.want.count, res.count, "ledger count")
-			assert.Equal(t, c.want.gaps, res.gaps, "gaps")
+			assert.Equal(t, c.want, res)
 
 			ds.AssertExpectations(t)
 		})

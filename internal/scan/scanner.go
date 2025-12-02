@@ -14,11 +14,11 @@ import (
 // Report represents the aggregated outcome of a full ledger scan.
 // It summarizes all gaps, counts, and the overall ledger range discovered.
 type Report struct {
-	Gaps         []Gap  `json:"gaps,omitempty"` // All missing ledger ranges found across the scan.
-	TotalFound   uint32 `json:"total_found"`    // Total number of ledgers successfully found.
-	TotalMissing uint64 `json:"total_missing"`  // Total number of missing ledgers across all gaps.
-	MinFound     uint32 `json:"min_found"`      // Lowest ledger sequence number observed.
-	MaxFound     uint32 `json:"max_found"`      // Highest ledger sequence number observed.
+	Gaps                []Gap  `json:"gaps,omitempty"`        // All missing ledger ranges found across the scan.
+	TotalLedgersFound   uint32 `json:"total_ledgers_found"`   // Total number of ledgers successfully found.
+	TotalLedgersMissing uint32 `json:"total_ledgers_missing"` // Total number of missing ledgers across all gaps.
+	MinSequenceFound    uint32 `json:"min_sequence_found"`    // Lowest ledger sequence number observed.
+	MaxSequenceFound    uint32 `json:"max_sequence_found"`    // Highest ledger sequence number observed.
 }
 
 // Gap represents a contiguous range of missing ledgers.
@@ -169,9 +169,9 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 		if errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
 			missing := uint64(to) - uint64(from) + 1
 			return Report{
-				Gaps:         []Gap{{Start: from, End: to}},
-				TotalFound:   0,
-				TotalMissing: missing,
+				Gaps:                []Gap{{Start: from, End: to}},
+				TotalLedgersFound:   0,
+				TotalLedgersMissing: uint32(missing),
 			}, nil
 		}
 		return Report{}, fmt.Errorf("datastore error: %w", findErr)

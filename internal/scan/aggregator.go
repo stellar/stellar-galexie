@@ -66,11 +66,11 @@ func (a *aggregator) finalize() Report {
 	}
 
 	return Report{
-		Gaps:         finalGaps,
-		TotalFound:   a.totalFound,
-		TotalMissing: totalMissing,
-		MinFound:     a.minFound,
-		MaxFound:     a.maxFound,
+		Gaps:                finalGaps,
+		TotalLedgersFound:   a.totalFound,
+		TotalLedgersMissing: uint32(totalMissing),
+		MinSequenceFound:    a.minFound,
+		MaxSequenceFound:    a.maxFound,
 	}
 }
 

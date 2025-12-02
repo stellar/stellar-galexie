@@ -28,18 +28,18 @@ func TestAggregator_AddAndFinalize_Success(t *testing.T) {
 	rep := a.finalize()
 
 	// Totals
-	require.Equal(t, uint32(24), rep.TotalFound, "sum of counts should be 24")
+	require.Equal(t, uint32(24), rep.TotalLedgersFound)
 
-	// MinFound/MaxFound across inputs
-	require.Equal(t, uint32(1), rep.MinFound)
-	require.Equal(t, uint32(25), rep.MaxFound)
+	// MinSequenceFound/MaxSequenceFound across inputs
+	require.Equal(t, uint32(1), rep.MinSequenceFound)
+	require.Equal(t, uint32(25), rep.MaxSequenceFound)
 
 	// gaps merged and accounted (20–25) + (26–30) → (20–30)
 	require.Len(t, rep.Gaps, 1)
 	assert.Equal(t, Gap{Start: 20, End: 30}, rep.Gaps[0])
 
-	// TotalMissing = inclusive size of [20,30] = 11
-	assert.Equal(t, uint64(11), rep.TotalMissing)
+	// TotalLedgersMissing = inclusive size of [20,30] = 11
+	assert.Equal(t, uint32(11), rep.TotalLedgersMissing)
 }
 
 func TestAggregator_Empty_ReturnsZeroReport(t *testing.T) {
@@ -56,10 +56,10 @@ func TestAggregator_gapsOnly_NoData_MinMax(t *testing.T) {
 	rep := a.finalize()
 	require.Len(t, rep.Gaps, 1)
 	assert.Equal(t, Gap{Start: 5, End: 7}, rep.Gaps[0])
-	assert.Equal(t, uint64(3), rep.TotalMissing)
-	assert.Equal(t, uint32(0), rep.TotalFound)
-	assert.Equal(t, uint32(0), rep.MinFound)
-	assert.Equal(t, uint32(0), rep.MaxFound)
+	assert.Equal(t, uint32(3), rep.TotalLedgersMissing)
+	assert.Equal(t, uint32(0), rep.TotalLedgersFound)
+	assert.Equal(t, uint32(0), rep.MinSequenceFound)
+	assert.Equal(t, uint32(0), rep.MaxSequenceFound)
 }
 
 func TestAggregator_IgnoresErroredResults(t *testing.T) {
@@ -83,13 +83,13 @@ func TestAggregator_IgnoresErroredResults(t *testing.T) {
 	})
 
 	rep := a.finalize()
-	require.Equal(t, uint32(9), rep.TotalFound)
-	require.Equal(t, uint32(1), rep.MinFound)
-	require.Equal(t, uint32(9), rep.MaxFound)
+	require.Equal(t, uint32(9), rep.TotalLedgersFound)
+	require.Equal(t, uint32(1), rep.MinSequenceFound)
+	require.Equal(t, uint32(9), rep.MaxSequenceFound)
 
 	require.Len(t, rep.Gaps, 1)
 	assert.Equal(t, Gap{Start: 10, End: 12}, rep.Gaps[0])
-	assert.Equal(t, uint64(3), rep.TotalMissing)
+	assert.Equal(t, uint32(3), rep.TotalLedgersMissing)
 }
 
 func TestSortAndMergeGaps_UnsortedMergesCorrectly(t *testing.T) {
