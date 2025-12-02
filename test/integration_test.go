@@ -319,13 +319,62 @@ func (s *GalexieTestSuite) TestDetectGaps() {
 	require.Equal(expectedReport, resp.Report)
 
 }
+func (s *GalexieTestSuite) buildConfigFromTemplate(
+	t *testing.T,
+	filename string,
+	mutate func(cfg *toml.Tree),
+) (galexie.Config, string, *toml.Tree) {
+	t.Helper()
+
+	galexieConfigTemplate, err := toml.LoadFile(configTemplate)
+	if err != nil {
+		t.Fatalf("unable to load config template file %v, %v", configTemplate, err)
+	}
+
+	// Base settings common to all configs
+	galexieConfigTemplate.Set("stellar_core_config.stellar_core_binary_path",
+		os.Getenv("GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN"))
+	galexieConfigTemplate.Set("stellar_core_config.storage_path",
+		filepath.Join(s.testTempDir, "captive-core"))
+	galexieConfigTemplate.Set("datastore_config.type", s.storageType)
+
+	// Apply any per-config overrides
+	if mutate != nil {
+		mutate(galexieConfigTemplate)
+	}
+
+	tomlBytes, err := toml.Marshal(galexieConfigTemplate)
+	if err != nil {
+		t.Fatalf("unable to parse config file toml %v, %v", configTemplate, err)
+	}
+
+	var cfg galexie.Config
+	if err = toml.Unmarshal(tomlBytes, &cfg); err != nil {
+		t.Fatalf("unable to marshal config file toml into struct, %v", err)
+	}
+	cfg.DataStoreConfig.NetworkPassphrase = cfg.StellarCoreConfig.NetworkPassphrase
+
+	configPath := filepath.Join(s.testTempDir, filename)
+	if err = os.WriteFile(configPath, tomlBytes, 0o777); err != nil {
+		t.Fatalf("unable to write temp config file %v, %v", configPath, err)
+	}
+
+	return cfg, configPath, galexieConfigTemplate
+}
 
 func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
 	require := s.Require()
+	t := s.T()
 
 	// Use a config where ledgers_per_file = 8 so ranges are aligned to
 	// 8-ledger file boundaries.
-	configPath := filepath.Join("data", "integration_config_8lpf.toml")
+	_, configPath, _ := s.buildConfigFromTemplate(
+		t,
+		"config.schema-8.toml",
+		func(tree *toml.Tree) {
+			tree.Set("datastore_config.schema.ledgers_per_file", int64(8))
+		},
+	)
 
 	rootCmd := cmd.DefineCommands()
 
@@ -611,35 +660,17 @@ func (s *GalexieTestSuite) SetupSuite() {
 			s.TearDownSuite()
 		}
 	}()
+
 	s.testTempDir = t.TempDir()
 
-	galexieConfigTemplate, err := toml.LoadFile(configTemplate)
-	if err != nil {
-		t.Fatalf("unable to load config template file %v, %v", configTemplate, err)
-	}
-
-	// if GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN not specified,
-	// galexie will attempt resolve core bin using 'stellar-core' from OS path
-	galexieConfigTemplate.Set("stellar_core_config.stellar_core_binary_path",
-		os.Getenv("GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN"))
-
-	galexieConfigTemplate.Set("stellar_core_config.storage_path", filepath.Join(s.testTempDir, "captive-core"))
-	galexieConfigTemplate.Set("datastore_config.type", s.storageType)
-
-	tomlBytes, err := toml.Marshal(galexieConfigTemplate)
-	if err != nil {
-		t.Fatalf("unable to parse config file toml %v, %v", configTemplate, err)
-	}
-	if err = toml.Unmarshal(tomlBytes, &s.config); err != nil {
-		t.Fatalf("unable to marshal config file toml into struct, %v", err)
-	}
-	s.config.DataStoreConfig.NetworkPassphrase = s.config.StellarCoreConfig.NetworkPassphrase
-
-	s.tempConfigFile = filepath.Join(s.testTempDir, "config.toml")
-	err = os.WriteFile(s.tempConfigFile, tomlBytes, 0777)
-	if err != nil {
-		t.Fatalf("unable to write temp config file %v, %v", s.tempConfigFile, err)
-	}
+	// Build the default config used by most tests
+	cfg, configPath, galexieConfigTemplate := s.buildConfigFromTemplate(
+		t,
+		"config.toml",
+		nil,
+	)
+	s.config = cfg
+	s.tempConfigFile = configPath
 
 	s.dockerCli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
