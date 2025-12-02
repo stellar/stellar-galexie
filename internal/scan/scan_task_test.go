@@ -42,13 +42,13 @@ func TestScanTask(t *testing.T) {
 		},
 		{
 			"contiguous coverage",
-			[][]string{{fpath(50, 100)}, {fpath(1, 49)}, {}},
-			task{low: 1, high: 100},
+			[][]string{{fpath(50, 100)}, {fpath(2, 49)}, {}},
+			task{low: 2, high: 100},
 			result{
 				gaps:  []Gap{},
-				low:   1,
+				low:   2,
 				high:  100,
-				count: 100,
+				count: 99,
 			},
 		},
 	}
