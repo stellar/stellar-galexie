@@ -34,6 +34,11 @@ func scanTask(
 			return res, fmt.Errorf("invalid ledger range: %d-%d", cur.Low, cur.High)
 		}
 
+		// Datastore may return cur.Low = 0 for the first file when ledgers_per_file > 1
+		// (e.g., "00000000-00000009.xdr"), but real ledger sequences start at 2.
+		// Clamp to ensure correct reporting.
+		cur.Low = max(2, cur.Low)
+
 		if res.count == 0 {
 			// First file: set the high watermark and check the top boundary Gap.
 			res.high = cur.High
