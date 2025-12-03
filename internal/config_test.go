@@ -36,7 +36,7 @@ func TestNewConfig(t *testing.T) {
 		require.False(t, config.Mode.RequiresBoundedRange())
 		url, ok := config.DataStoreConfig.Params["destination_bucket_path"]
 		require.True(t, ok)
-		require.Equal(t, url, "your-bucket-name/subpath/testnet")
+		require.Equal(t, url, "your-bucket-name/subpath/"+network[0])
 		mockArchive.AssertExpectations(t)
 	}
 }

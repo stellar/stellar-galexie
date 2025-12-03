@@ -160,7 +160,6 @@ func NewConfig(settings RuntimeSettings, getCoreVersionFn ledgerbackend.CoreBuil
 
 // ValidateLedgerRange Validates requested ledger range
 func (config *Config) ValidateLedgerRange(archive historyarchive.ArchiveInterface) error {
-
 	if config.Mode.LoadTest() {
 		if config.LoadTestLedgersPath == "" {
 			return errors.New("ledgers-path is required for load test mode")
@@ -338,9 +337,9 @@ func (config *Config) processToml(tomlPath string) error {
 		config.SerializedCaptiveCoreToml = ledgerbackend.FuturenetDefaultConfig
 
 	default:
-		return errors.New("invalid captive core config, " +
-			"preconfigured_network must be set to 'pubnet', 'testnet', or 'futurenet', or network_passphrase," +
-			"history_archive_urls and captive_core_toml_path must be set")
+		return fmt.Errorf("invalid captive core config, "+
+			"network must be set to '%s', '%s', or '%s', or network_passphrase,"+
+			"history_archive_urls and captive_core_toml_path must be set", Pubnet, Testnet, Futurenet)
 	}
 
 	if config.StellarCoreConfig.NetworkPassphrase == "" {
@@ -357,7 +356,6 @@ func (config *Config) processToml(tomlPath string) error {
 				return errors.Wrap(err, "Failed to load captive-core-toml-path file")
 			}
 		}
-
 	}
 	// Populate the datastore config with the network passphrase for datastore manifest.
 	config.DataStoreConfig.NetworkPassphrase = config.StellarCoreConfig.NetworkPassphrase

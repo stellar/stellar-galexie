@@ -6,7 +6,7 @@ network = "futurenet"
 type = "ABC"
 
 [datastore_config.params]
-destination_bucket_path = "your-bucket-name/subpath/testnet"
+destination_bucket_path = "your-bucket-name/subpath/futurenet"
 
 [datastore_config.schema]
 ledgers_per_file = 3
