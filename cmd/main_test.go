@@ -172,6 +172,38 @@ func TestFlagsOutput(t *testing.T) {
 			expectedErrOutput: "test error",
 			appRunner:         appRunnerError,
 		},
+		{
+			name:              "detect-gaps sub-command with start and end present",
+			commandArgs:       []string{"detect-gaps", "--start", "4", "--end", "5", "--config-file", "myfile"},
+			expectedErrOutput: "",
+			appRunner:         appRunnerSuccess,
+			expectedSettings: galexie.RuntimeSettings{
+				StartLedger:    4,
+				EndLedger:      5,
+				ConfigFilePath: "myfile",
+				Mode:           galexie.DetectGaps,
+				Ctx:            ctx,
+			},
+		},
+		{
+			name:              "detect-gaps sub-command with start and end absent",
+			commandArgs:       []string{"detect-gaps", "--config-file", "myfile"},
+			expectedErrOutput: "",
+			appRunner:         appRunnerSuccess,
+			expectedSettings: galexie.RuntimeSettings{
+				StartLedger:    0,
+				EndLedger:      0,
+				ConfigFilePath: "myfile",
+				Mode:           galexie.DetectGaps,
+				Ctx:            ctx,
+			},
+		},
+		{
+			name:              "detect-gaps sub-command prints app error",
+			commandArgs:       []string{"detect-gaps", "--start", "4", "--end", "5", "--config-file", "myfile"},
+			expectedErrOutput: "test error",
+			appRunner:         appRunnerError,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -189,6 +221,8 @@ func TestFlagsOutput(t *testing.T) {
 			if testCase.expectedErrOutput != "" {
 				assert.Contains(t, errOutput, testCase.expectedErrOutput)
 			} else {
+				// Ignore ReportWriter in comparison
+				testResultSettings.ReportWriter = nil
 				assert.Equal(t, testCase.expectedSettings, testResultSettings)
 			}
 		})
