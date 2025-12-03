@@ -12,29 +12,33 @@ import (
 )
 
 func TestNewConfig(t *testing.T) {
-	mockArchive := &historyarchive.MockArchive{}
-	mockArchive.On("GetLatestLedgerSequence").Return(uint32(5), nil).Once()
-	mockArchive.On("GetCheckpointManager").
-		Return(historyarchive.NewCheckpointManager(
-			historyarchive.DefaultCheckpointFrequency)).Once()
+	networks := [][]string{{"pubnet", "test/test-pubnet.toml"}, {"testnet", "test/test-testnet.toml"}, {"futurenet", "test/test-futurenet.toml"}}
 
-	config, err := NewConfig(
-		RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: "test/test.toml", Mode: Append}, nil)
+	for _, network := range networks {
+		mockArchive := &historyarchive.MockArchive{}
+		mockArchive.On("GetLatestLedgerSequence").Return(uint32(5), nil).Once()
+		mockArchive.On("GetCheckpointManager").
+			Return(historyarchive.NewCheckpointManager(
+				historyarchive.DefaultCheckpointFrequency)).Once()
 
-	require.NoError(t, err)
-	err = config.ValidateLedgerRange(mockArchive)
-	require.NoError(t, err)
-	require.Equal(t, config.StellarCoreConfig.Network, "pubnet")
-	require.Equal(t, config.DataStoreConfig.Type, "ABC")
-	require.Equal(t, config.DataStoreConfig.Schema.FilesPerPartition, uint32(1))
-	require.Equal(t, config.DataStoreConfig.Schema.LedgersPerFile, uint32(3))
-	require.Equal(t, config.UserAgent, "galexie")
-	require.True(t, config.Mode.Resumable())
-	require.False(t, config.Mode.RequiresBoundedRange())
-	url, ok := config.DataStoreConfig.Params["destination_bucket_path"]
-	require.True(t, ok)
-	require.Equal(t, url, "your-bucket-name/subpath/testnet")
-	mockArchive.AssertExpectations(t)
+		config, err := NewConfig(
+			RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: network[1], Mode: Append}, nil)
+
+		require.NoError(t, err)
+		err = config.ValidateLedgerRange(mockArchive)
+		require.NoError(t, err)
+		require.Equal(t, config.StellarCoreConfig.Network, network[0])
+		require.Equal(t, config.DataStoreConfig.Type, "ABC")
+		require.Equal(t, config.DataStoreConfig.Schema.FilesPerPartition, uint32(1))
+		require.Equal(t, config.DataStoreConfig.Schema.LedgersPerFile, uint32(3))
+		require.Equal(t, config.UserAgent, "galexie")
+		require.True(t, config.Mode.Resumable())
+		require.False(t, config.Mode.RequiresBoundedRange())
+		url, ok := config.DataStoreConfig.Params["destination_bucket_path"]
+		require.True(t, ok)
+		require.Equal(t, url, "your-bucket-name/subpath/testnet")
+		mockArchive.AssertExpectations(t)
+	}
 }
 
 func TestGenerateHistoryArchiveFromPreconfiguredNetwork(t *testing.T) {
@@ -65,11 +69,14 @@ func TestNewConfigUserAgent(t *testing.T) {
 }
 
 func TestResumeDisabled(t *testing.T) {
+	networkCfgs := []string{"test/test-pubnet.toml", "test/test-testnet.toml", "test/test-futurenet.toml"}
 	// resumable is only enabled when mode is Append
-	config, err := NewConfig(
-		RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: "test/test.toml", Mode: ScanFill}, nil)
-	require.NoError(t, err)
-	require.False(t, config.Mode.Resumable())
+	for _, cfgPath := range networkCfgs {
+		config, err := NewConfig(
+			RuntimeSettings{StartLedger: 2, EndLedger: 3, ConfigFilePath: cfgPath, Mode: ScanFill}, nil)
+		require.NoError(t, err)
+		require.False(t, config.Mode.Resumable())
+	}
 }
 
 func TestInvalidConfigFilePath(t *testing.T) {
@@ -291,7 +298,6 @@ func TestValidateLedgerRangeBoundedMode(t *testing.T) {
 		}
 		mockArchive.AssertExpectations(t)
 	}
-
 }
 
 func TestValidateLedgerRangeUnboundedMode(t *testing.T) {
