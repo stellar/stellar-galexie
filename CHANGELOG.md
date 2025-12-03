@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Pending]
+
+## New Features
+ - Added `detect-gaps` Command ([#43](https://github.com/stellar/stellar-galexie/pull/43))
+    - New galexie `detect-gaps` command for scanning datastore to find any missing ledger sequences (gaps) within a specified range.
+    - The command scans a ledger range defined by `--start` and `--end`.
+    - Reports can be printed to `stdout` or saved as a JSON file using the `--output-file` flag.
+
+    Usage:
+    ```
+         galexie detect-gaps --start <start_ledger> --end <end_ledger> --output-file gaps.json
+    ```
+
 ## [v24.1.0]
 
 ### New Features

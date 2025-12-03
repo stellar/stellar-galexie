@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/stellar/stellar-galexie/cmd"
 	galexie "github.com/stellar/stellar-galexie/internal"
+	"github.com/stellar/stellar-galexie/internal/scan"
 )
 
 const (
@@ -134,7 +136,7 @@ func (s *GalexieTestSuite) TestScanAndFill() {
 	require.NoError(err)
 }
 
-func (s *GalexieTestSuite) TesReplace() {
+func (s *GalexieTestSuite) TestReplace() {
 	require := s.Require()
 
 	rootCmd := cmd.DefineCommands()
@@ -255,6 +257,181 @@ func (s *GalexieTestSuite) TestAppendUnbounded() {
 		_, err = datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
 		assert.NoError(err)
 	}, 180*time.Second, 50*time.Millisecond, "append unbounded did not work")
+}
+
+func (s *GalexieTestSuite) TestDetectGaps() {
+	require := s.Require()
+
+	// scan-and-fill a partial range
+	fillCmd := cmd.DefineCommands()
+	fillCmd.SetArgs([]string{
+		"scan-and-fill",
+		"--start", "4",
+		"--end", "8",
+		"--config-file", s.tempConfigFile,
+	})
+
+	require.NoError(fillCmd.ExecuteContext(s.ctx))
+
+	// Run detect-gaps on a wider range that includes missing ledgers
+	rootCmd := cmd.DefineCommands()
+
+	var detectOut bytes.Buffer
+	var detectErr bytes.Buffer
+	rootCmd.SetOut(&detectOut)
+	rootCmd.SetErr(&detectErr)
+
+	rootCmd.SetArgs([]string{
+		"detect-gaps",
+		"--start", "2",
+		"--end", "20",
+		"--config-file", s.tempConfigFile,
+	})
+
+	require.NoError(rootCmd.ExecuteContext(s.ctx))
+
+	outputJSON := detectOut.String()
+	s.T().Log("detect-gaps JSON output:\n" + outputJSON)
+
+	var resp galexie.DetectGapsOutput
+	require.NoError(json.Unmarshal([]byte(outputJSON), &resp))
+
+	require.Equal(uint32(2), resp.ScanFrom)
+	require.Equal(uint32(20), resp.ScanTo)
+
+	// Since we only filled 4–8, we expect missing ranges before and after.
+	expectedReport := scan.Report{
+		Gaps: []scan.Gap{
+			{
+				Start: 2,
+				End:   3,
+			},
+			{
+				Start: 9,
+				End:   20,
+			},
+		},
+		TotalLedgersFound:   5,
+		TotalLedgersMissing: 14,
+		MinSequenceFound:    4,
+		MaxSequenceFound:    8,
+	}
+	require.Equal(expectedReport, resp.Report)
+
+}
+func (s *GalexieTestSuite) buildConfigFromTemplate(
+	t *testing.T,
+	filename string,
+	mutate func(cfg *toml.Tree),
+) (galexie.Config, string, *toml.Tree) {
+	t.Helper()
+
+	galexieConfigTemplate, err := toml.LoadFile(configTemplate)
+	if err != nil {
+		t.Fatalf("unable to load config template file %v, %v", configTemplate, err)
+	}
+
+	// Base settings common to all configs
+	galexieConfigTemplate.Set("stellar_core_config.stellar_core_binary_path",
+		os.Getenv("GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN"))
+	galexieConfigTemplate.Set("stellar_core_config.storage_path",
+		filepath.Join(s.testTempDir, "captive-core"))
+	galexieConfigTemplate.Set("datastore_config.type", s.storageType)
+
+	// Apply any per-config overrides
+	if mutate != nil {
+		mutate(galexieConfigTemplate)
+	}
+
+	tomlBytes, err := toml.Marshal(galexieConfigTemplate)
+	if err != nil {
+		t.Fatalf("unable to parse config file toml %v, %v", configTemplate, err)
+	}
+
+	var cfg galexie.Config
+	if err = toml.Unmarshal(tomlBytes, &cfg); err != nil {
+		t.Fatalf("unable to marshal config file toml into struct, %v", err)
+	}
+	cfg.DataStoreConfig.NetworkPassphrase = cfg.StellarCoreConfig.NetworkPassphrase
+
+	configPath := filepath.Join(s.testTempDir, filename)
+	if err = os.WriteFile(configPath, tomlBytes, 0o777); err != nil {
+		t.Fatalf("unable to write temp config file %v, %v", configPath, err)
+	}
+
+	return cfg, configPath, galexieConfigTemplate
+}
+
+func (s *GalexieTestSuite) TestDetectGaps_WritesJSONReportToFile() {
+	require := s.Require()
+	t := s.T()
+
+	// Use a config where ledgers_per_file = 8 so ranges are aligned to
+	// 8-ledger file boundaries.
+	_, configPath, _ := s.buildConfigFromTemplate(
+		t,
+		"config.schema-8.toml",
+		func(tree *toml.Tree) {
+			tree.Set("datastore_config.schema.ledgers_per_file", int64(8))
+		},
+	)
+
+	rootCmd := cmd.DefineCommands()
+
+	// Run a small scan-and-fill to ensure some ledgers exist.
+	// With ledgers_per_file = 8, a requested range of 4–8 will be aligned
+	// to the file boundary and actually fill 2–7, 8-15.
+	rootCmd.SetArgs([]string{
+		"scan-and-fill",
+		"--start", "4",
+		"--end", "8",
+		"--config-file", configPath,
+	})
+	var errBuf, outBuf bytes.Buffer
+	rootCmd.SetErr(&errBuf)
+	rootCmd.SetOut(&outBuf)
+	err := rootCmd.ExecuteContext(s.ctx)
+	require.NoError(err, errBuf.String())
+
+	// Now run detect-gaps over a wider range and write JSON to a file.
+	tmpDir := s.T().TempDir()
+	reportPath := filepath.Join(tmpDir, "gaps.json")
+
+	rootCmd.SetArgs([]string{
+		"detect-gaps",
+		"--start", "2",
+		"--end", "20",
+		"--config-file", configPath,
+		"--output-file", reportPath,
+	})
+	errBuf.Reset()
+	outBuf.Reset()
+	rootCmd.SetErr(&errBuf)
+	rootCmd.SetOut(&outBuf)
+
+	require.NoError(rootCmd.ExecuteContext(s.ctx))
+
+	// The report file should exist.
+	data, readErr := os.ReadFile(reportPath)
+	require.NoError(readErr)
+
+	// Decode JSON.
+	var out galexie.DetectGapsOutput
+	require.NoError(json.Unmarshal(data, &out))
+
+	expectedReport := scan.Report{
+		Gaps: []scan.Gap{{
+			Start: 16,
+			End:   23,
+		}},
+		TotalLedgersFound:   14,
+		TotalLedgersMissing: 8,
+		MinSequenceFound:    2,
+		MaxSequenceFound:    15,
+	}
+	require.Equal(uint32(2), out.ScanFrom)
+	require.Equal(uint32(20), out.ScanTo)
+	require.Equal(expectedReport, out.Report)
 }
 
 func (s *GalexieTestSuite) SetupTest() {
@@ -483,35 +660,17 @@ func (s *GalexieTestSuite) SetupSuite() {
 			s.TearDownSuite()
 		}
 	}()
+
 	s.testTempDir = t.TempDir()
 
-	galexieConfigTemplate, err := toml.LoadFile(configTemplate)
-	if err != nil {
-		t.Fatalf("unable to load config template file %v, %v", configTemplate, err)
-	}
-
-	// if GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN not specified,
-	// galexie will attempt resolve core bin using 'stellar-core' from OS path
-	galexieConfigTemplate.Set("stellar_core_config.stellar_core_binary_path",
-		os.Getenv("GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN"))
-
-	galexieConfigTemplate.Set("stellar_core_config.storage_path", filepath.Join(s.testTempDir, "captive-core"))
-	galexieConfigTemplate.Set("datastore_config.type", s.storageType)
-
-	tomlBytes, err := toml.Marshal(galexieConfigTemplate)
-	if err != nil {
-		t.Fatalf("unable to parse config file toml %v, %v", configTemplate, err)
-	}
-	if err = toml.Unmarshal(tomlBytes, &s.config); err != nil {
-		t.Fatalf("unable to marshal config file toml into struct, %v", err)
-	}
-	s.config.DataStoreConfig.NetworkPassphrase = s.config.StellarCoreConfig.NetworkPassphrase
-
-	s.tempConfigFile = filepath.Join(s.testTempDir, "config.toml")
-	err = os.WriteFile(s.tempConfigFile, tomlBytes, 0777)
-	if err != nil {
-		t.Fatalf("unable to write temp config file %v, %v", s.tempConfigFile, err)
-	}
+	// Build the default config used by most tests
+	cfg, configPath, galexieConfigTemplate := s.buildConfigFromTemplate(
+		t,
+		"config.toml",
+		nil,
+	)
+	s.config = cfg
+	s.tempConfigFile = configPath
 
 	s.dockerCli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

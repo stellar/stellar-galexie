@@ -2,7 +2,9 @@ package galexie
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,6 +25,8 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/datastore"
 	supporthttp "github.com/stellar/go-stellar-sdk/support/http"
 	"github.com/stellar/go-stellar-sdk/support/log"
+
+	"github.com/stellar/stellar-galexie/internal/scan"
 )
 
 const (
@@ -80,6 +84,13 @@ func (m InvalidDataStoreError) Error() string {
 		m.LedgerSequence, m.LedgersPerFile)
 }
 
+type DetectGapsOutput struct {
+	ScanFrom uint32      `json:"scan_from"`
+	ScanTo   uint32      `json:"scan_to"`
+	Duration string      `json:"duration,omitempty"`
+	Report   scan.Report `json:"report"`
+}
+
 type App struct {
 	config        *Config
 	ledgerBackend ledgerbackend.LedgerBackend
@@ -101,40 +112,67 @@ func (a *App) init(ctx context.Context, runtimeSettings RuntimeSettings) error {
 
 	logger.Infof("Starting Galexie with version %s", version)
 
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: nameSpace}),
-		collectors.NewGoCollector(),
-	)
-
 	if a.config, err = NewConfig(runtimeSettings, nil); err != nil {
 		return errors.Wrap(err, "Could not load configuration")
 	}
 	if archive, err = a.config.GenerateHistoryArchive(ctx, logger); err != nil {
 		return err
 	}
-	if err = a.config.ValidateAndSetLedgerRange(ctx, archive); err != nil {
+	if err = a.config.ValidateLedgerRange(archive); err != nil {
 		return err
 	}
 
+	if err = a.initDataStore(ctx); err != nil {
+		return err
+	}
+
+	if a.config.Mode.Export() {
+		if err = a.initExportPipeline(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *App) initDataStore(ctx context.Context) error {
+	var err error
 	if a.dataStore, err = datastore.NewDataStore(ctx, a.config.DataStoreConfig); err != nil {
 		return fmt.Errorf("could not connect to destination data store %w", err)
 	}
 
 	// For load test mode, ensure datastore is empty
-	if a.config.Mode == LoadTest {
+	if a.config.Mode.LoadTest() {
 		files, listErr := a.dataStore.ListFilePaths(ctx, datastore.ListFileOptions{Limit: 5})
 		if listErr != nil {
 			return fmt.Errorf("could not list datastore files for load test validation: %w", listErr)
 		}
 		if len(files) > 0 {
-			return fmt.Errorf("load test mode requires an empty datastore, however, found existing files.")
+			return fmt.Errorf("load test mode requires an empty datastore, however, found existing files")
 		}
 	}
 
 	if err = validateExistingFileExtension(ctx, a.dataStore); err != nil {
 		return err
 	}
+
+	schema, err := datastore.LoadSchema(ctx, a.dataStore, a.config.DataStoreConfig)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve datastore schema: %w", err)
+	}
+	a.config.DataStoreConfig.Schema = schema
+
+	return nil
+}
+
+func (a *App) initExportPipeline(ctx context.Context) error {
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{Namespace: nameSpace}),
+		collectors.NewGoCollector(),
+	)
+
+	a.config.adjustLedgerRange()
 
 	logger.Infof("Attempting to configure datastore...")
 	manifest, created, err := datastore.PublishConfig(ctx, a.dataStore, a.config.DataStoreConfig)
@@ -148,7 +186,7 @@ func (a *App) init(ctx context.Context, runtimeSettings RuntimeSettings) error {
 		logger.WithField("manifest", manifest).Infof("Datastore config manifest already exists.")
 	}
 
-	if a.config.Resumable() {
+	if a.config.Mode.Resumable() {
 		if err = a.applyResumability(ctx); err != nil {
 			return err
 		}
@@ -168,7 +206,7 @@ func (a *App) init(ctx context.Context, runtimeSettings RuntimeSettings) error {
 		a.config.CoreVersion); err != nil {
 		return err
 	}
-	a.uploader = NewUploader(a.dataStore, queue, registry, a.config.Mode == Replace)
+	a.uploader = NewUploader(a.dataStore, queue, registry, a.config.Mode.Replace())
 
 	if a.config.AdminPort != 0 {
 		a.adminServer = newAdminServer(a.config.AdminPort, registry)
@@ -220,8 +258,10 @@ func (a *App) close() {
 	if err := a.dataStore.Close(); err != nil {
 		logger.WithError(err).Error("Error closing datastore")
 	}
-	if err := a.ledgerBackend.Close(); err != nil {
-		logger.WithError(err).Error("Error closing ledgerBackend")
+	if a.config.Mode.Export() {
+		if err := a.ledgerBackend.Close(); err != nil {
+			logger.WithError(err).Error("Error closing ledgerBackend")
+		}
 	}
 }
 
@@ -253,6 +293,40 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 	}
 	defer a.close()
 
+	switch {
+	case runtimeSettings.Mode.Export():
+		if err := a.export(ctx, cancel); err != nil {
+			logger.WithError(err).Error("Stopping Galexie")
+			return err
+		}
+	case runtimeSettings.Mode == DetectGaps:
+		err := a.runDetectGaps(ctx, runtimeSettings.ReportWriter)
+		if err != nil {
+			logger.WithError(err).Error("Stopping Galexie")
+			return err
+		}
+	default:
+		return fmt.Errorf("unsupported mode: %v", runtimeSettings.Mode)
+	}
+
+	logger.Info("Shutting down Galexie")
+	return nil
+}
+
+func (a *App) export(ctx context.Context, cancel context.CancelFunc) error {
+	if a.adminServer != nil {
+		// no need to include this goroutine in the wait group
+		// because a.adminServer.Shutdown() is called below and
+		// that will block until a.adminServer has finished
+		// shutting down
+		go func() {
+			logger.Infof("Starting admin server on port %v", a.config.AdminPort)
+			if err := a.adminServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Warn(errors.Wrap(err, "error in internalServer.ListenAndServe()"))
+			}
+		}()
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -279,21 +353,7 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 		}
 	}()
 
-	if a.adminServer != nil {
-		// no need to include this goroutine in the wait group
-		// because a.adminServer.Shutdown() is called below and
-		// that will block until a.adminServer has finished
-		// shutting down
-		go func() {
-			logger.Infof("Starting admin server on port %v", a.config.AdminPort)
-			if err := a.adminServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				log.Warn(errors.Wrap(err, "error in internalServer.ListenAndServe()"))
-			}
-		}()
-	}
-
 	wg.Wait()
-	logger.Info("Shutting down Galexie")
 
 	if a.adminServer != nil {
 		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.Background(), adminServerShutdownTimeout)
@@ -303,6 +363,74 @@ func (a *App) Run(runtimeSettings RuntimeSettings) error {
 			logger.WithError(err).Warn("error in internalServer.Shutdown")
 		}
 	}
+	return nil
+}
+
+const defaultTaskSize = uint32(100_000)
+
+// TODO: make this configurable
+const defaultNumWorkers = 32
+
+func (a *App) runDetectGaps(ctx context.Context, reportWriter io.Writer) error {
+	from := a.config.StartLedger
+	to := a.config.EndLedger
+
+	if from > to {
+		return fmt.Errorf("invalid range: from (%d) must be <= to (%d)", from, to)
+	}
+
+	sc, _ := scan.NewScanner(
+		a.dataStore,
+		a.config.DataStoreConfig.Schema,
+		defaultNumWorkers,
+		defaultTaskSize,
+		logger,
+	)
+
+	start := time.Now()
+	rep, err := sc.Run(ctx, from, to)
+	dur := time.Since(start)
+	if err != nil {
+		logger.WithFields(log.F{
+			"scan_from": from,
+			"scan_to":   to,
+		}).WithError(err).Error("detect-gaps scan failed")
+		return err
+	}
+
+	if reportWriter != nil {
+		out := DetectGapsOutput{
+			ScanFrom: from,
+			ScanTo:   to,
+			Duration: dur.String(),
+			Report:   rep,
+		}
+
+		enc := json.NewEncoder(reportWriter)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(out); err != nil {
+			logger.WithError(err).Error("failed to encode detect-gaps JSON report")
+			return fmt.Errorf("failed to encode detect-gaps report: %w", err)
+		}
+	}
+
+	fields := log.F{
+		"scan_from":     from,
+		"scan_to":       to,
+		"min_found":     rep.MinSequenceFound,
+		"max_found":     rep.MaxSequenceFound,
+		"total_found":   rep.TotalLedgersFound,
+		"total_missing": rep.TotalLedgersMissing,
+		"gaps_count":    len(rep.Gaps),
+		"duration":      dur.String(),
+	}
+
+	if rep.TotalLedgersMissing > 0 {
+		logger.WithFields(fields).Warn("detect-gaps completed with gaps")
+	} else {
+		logger.WithFields(fields).Info("detect-gaps completed successfully")
+	}
+
 	return nil
 }
 
@@ -324,7 +452,7 @@ func newLedgerBackend(config *Config, prometheusRegistry *prometheus.Registry) (
 	}
 
 	// For load test mode, wrap the backend with loadtest backend
-	if config.Mode == LoadTest {
+	if config.Mode.LoadTest() {
 		captiveCoreBackend = newLoadTestBackend(config, captiveCoreBackend)
 	}
 

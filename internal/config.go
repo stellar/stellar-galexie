@@ -35,21 +35,44 @@ const (
 	ScanFill Mode = iota
 	Append
 	Replace
+	DetectGaps
 	LoadTest
 )
 
-func (mode Mode) Name() string {
-	switch mode {
+func (m Mode) Name() string {
+	switch m {
 	case ScanFill:
 		return "Scan and Fill"
 	case Append:
 		return "Append"
 	case Replace:
 		return "Replace"
+	case DetectGaps:
+		return "Detect Gaps"
 	case LoadTest:
 		return "Load Test"
 	}
 	return "none"
+}
+
+func (m Mode) Resumable() bool {
+	return m == Append
+}
+
+func (m Mode) RequiresBoundedRange() bool {
+	return m == ScanFill || m == Replace || m == DetectGaps
+}
+
+func (m Mode) LoadTest() bool {
+	return m == LoadTest
+}
+
+func (m Mode) Export() bool {
+	return m != DetectGaps
+}
+
+func (m Mode) Replace() bool {
+	return m == Replace
 }
 
 // user-configurable in the future.
@@ -65,6 +88,8 @@ type RuntimeSettings struct {
 	LoadTestMerge         bool
 	LoadTestLedgersPath   string
 	LoadTestCloseDuration time.Duration
+	// Detect gaps specific fields
+	ReportWriter io.Writer
 }
 
 type StellarCoreConfig struct {
@@ -117,7 +142,7 @@ func NewConfig(settings RuntimeSettings, getCoreVersionFn ledgerbackend.CoreBuil
 		config.CoreBuildVersionFn = getCoreVersionFn
 	}
 
-	logger.Infof("Requested export mode of %v with start=%d, end=%d", settings.Mode.Name(), config.StartLedger, config.EndLedger)
+	logger.Infof("Requested %v mode with start=%d, end=%d", settings.Mode.Name(), config.StartLedger, config.EndLedger)
 
 	var err error
 	if err = config.processToml(settings.ConfigFilePath); err != nil {
@@ -125,20 +150,18 @@ func NewConfig(settings RuntimeSettings, getCoreVersionFn ledgerbackend.CoreBuil
 	}
 	logger.Infof("Network Config Archive URLs: %v", config.StellarCoreConfig.HistoryArchiveUrls)
 	logger.Infof("Network Config Archive Passphrase: %v", config.StellarCoreConfig.NetworkPassphrase)
-	logger.Infof("Network Config Stellar Core Binary Path: %v", config.StellarCoreConfig.StellarCoreBinaryPath)
-	logger.Infof("Network Config Stellar Core Toml Config: %v", string(config.SerializedCaptiveCoreToml))
 
+	if config.Mode.Export() {
+		logger.Infof("Network Config Stellar Core Binary Path: %v", config.StellarCoreConfig.StellarCoreBinaryPath)
+		logger.Infof("Network Config Stellar Core Toml Config: %v", string(config.SerializedCaptiveCoreToml))
+	}
 	return config, nil
 }
 
-func (config *Config) Resumable() bool {
-	return config.Mode == Append
-}
+// ValidateLedgerRange Validates requested ledger range
+func (config *Config) ValidateLedgerRange(archive historyarchive.ArchiveInterface) error {
 
-// Validates requested ledger range, and will automatically adjust it
-// to be ledgers-per-file boundary aligned
-func (config *Config) ValidateAndSetLedgerRange(ctx context.Context, archive historyarchive.ArchiveInterface) error {
-	if config.Mode == LoadTest {
+	if config.Mode.LoadTest() {
 		if config.LoadTestLedgersPath == "" {
 			return errors.New("ledgers-path is required for load test mode")
 		}
@@ -155,9 +178,12 @@ func (config *Config) ValidateAndSetLedgerRange(ctx context.Context, archive his
 
 		if config.EndLedger != 0 {
 			if config.EndLedger-config.StartLedger > ledgersCount {
-				return errors.Errorf("invalid end value, the range of ledgers between start and end of %d must not exceed the number of ledgers in ledgers-path file of %d", config.EndLedger-config.StartLedger, ledgersCount)
+				return errors.Errorf("invalid end value, the range of ledgers between start and end of %d"+
+					" must not exceed the number of ledgers in ledgers-path file of %d",
+					config.EndLedger-config.StartLedger, ledgersCount)
 			}
-			logger.Infof("Detected %d ledgers in load test ledgers-path file, setting the load test mode ledger range to %d-%d", ledgersCount, config.StartLedger, config.EndLedger)
+			logger.Infof("Detected %d ledgers in load test ledgers-path file, setting the load test mode "+
+				"ledger range to %d-%d", ledgersCount, config.StartLedger, config.EndLedger)
 		}
 
 		return nil
@@ -167,7 +193,7 @@ func (config *Config) ValidateAndSetLedgerRange(ctx context.Context, archive his
 		return errors.New("invalid start value, must be greater than one.")
 	}
 
-	if (config.Mode == ScanFill || config.Mode == Replace) && config.EndLedger == 0 {
+	if config.Mode.RequiresBoundedRange() && config.EndLedger == 0 {
 		return errors.New("invalid end value, unbounded mode not supported, end must be greater than start.")
 	}
 
@@ -193,7 +219,6 @@ func (config *Config) ValidateAndSetLedgerRange(ctx context.Context, archive his
 			config.EndLedger, latestNetworkLedger)
 	}
 
-	config.adjustLedgerRange()
 	return nil
 }
 
@@ -278,9 +303,16 @@ func (config *Config) processToml(tomlPath string) error {
 		config.UserAgent = UserAgent
 	}
 
-	if config.StellarCoreConfig.Network == "" && (len(config.StellarCoreConfig.HistoryArchiveUrls) == 0 || config.StellarCoreConfig.NetworkPassphrase == "" || config.StellarCoreConfig.CaptiveCoreTomlPath == "") {
-		return errors.New("Invalid captive core config, the 'network' parameter must be set to pubnet or testnet or " +
-			"'stellar_core_config.history_archive_urls' and 'stellar_core_config.network_passphrase' and 'stellar_core_config.captive_core_toml_path' must be set.")
+	if config.StellarCoreConfig.Network == "" {
+		if len(config.StellarCoreConfig.HistoryArchiveUrls) == 0 || config.StellarCoreConfig.NetworkPassphrase == "" {
+			return errors.New("Invalid network config, the 'network' parameter must be set to pubnet or testnet or " +
+				"'stellar_core_config.history_archive_urls' and 'stellar_core_config.network_passphrase' must be set.")
+		}
+
+		if config.Mode.Export() && config.StellarCoreConfig.CaptiveCoreTomlPath == "" {
+			return errors.New("Invalid network config, the 'network' parameter must be set to pubnet or testnet or " +
+				"'captive_core_toml_path' must be set.")
+		}
 	}
 
 	// network config values are an overlay, with network preconfigured values being first if network is present
@@ -319,12 +351,14 @@ func (config *Config) processToml(tomlPath string) error {
 		config.StellarCoreConfig.HistoryArchiveUrls = networkArchiveUrls
 	}
 
-	if config.StellarCoreConfig.CaptiveCoreTomlPath != "" {
-		if config.SerializedCaptiveCoreToml, err = os.ReadFile(config.StellarCoreConfig.CaptiveCoreTomlPath); err != nil {
-			return errors.Wrap(err, "Failed to load captive-core-toml-path file")
+	if config.Mode.Export() {
+		if config.StellarCoreConfig.CaptiveCoreTomlPath != "" {
+			if config.SerializedCaptiveCoreToml, err = os.ReadFile(config.StellarCoreConfig.CaptiveCoreTomlPath); err != nil {
+				return errors.Wrap(err, "Failed to load captive-core-toml-path file")
+			}
 		}
-	}
 
+	}
 	// Populate the datastore config with the network passphrase for datastore manifest.
 	config.DataStoreConfig.NetworkPassphrase = config.StellarCoreConfig.NetworkPassphrase
 	config.DataStoreConfig.Compression = compressionType

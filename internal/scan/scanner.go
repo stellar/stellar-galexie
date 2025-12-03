@@ -11,18 +11,18 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/log"
 )
 
-// report represents the aggregated outcome of a full ledger scan.
+// Report represents the aggregated outcome of a full ledger scan.
 // It summarizes all gaps, counts, and the overall ledger range discovered.
-type report struct {
-	Gaps         []gap  `json:"gaps,omitempty"` // All missing ledger ranges found across the scan.
-	TotalFound   uint32 `json:"total_found"`    // Total number of ledgers successfully found.
-	TotalMissing uint64 `json:"total_missing"`  // Total number of missing ledgers across all gaps.
-	MinFound     uint32 `json:"min_found"`      // Lowest ledger sequence number observed.
-	MaxFound     uint32 `json:"max_found"`      // Highest ledger sequence number observed.
+type Report struct {
+	Gaps                []Gap  `json:"gaps,omitempty"`        // All missing ledger ranges found across the scan.
+	TotalLedgersFound   uint32 `json:"total_ledgers_found"`   // Total number of ledgers successfully found.
+	TotalLedgersMissing uint32 `json:"total_ledgers_missing"` // Total number of missing ledgers across all gaps.
+	MinSequenceFound    uint32 `json:"min_sequence_found"`    // Lowest ledger sequence number observed.
+	MaxSequenceFound    uint32 `json:"max_sequence_found"`    // Highest ledger sequence number observed.
 }
 
-// gap represents a contiguous range of missing ledgers.
-type gap struct {
+// Gap represents a contiguous range of missing ledgers.
+type Gap struct {
 	Start uint32 `json:"start"` // First missing ledger in the range.
 	End   uint32 `json:"end"`   // Last missing ledger in the range.
 }
@@ -36,7 +36,7 @@ type task struct {
 
 // result captures the outcome of a single scan task.
 type result struct {
-	gaps  []gap  // Gaps found within this task.
+	gaps  []Gap  // Gaps found within this task.
 	low   uint32 // Lowest ledger sequence found.
 	high  uint32 // Highest ledger sequence found.
 	count uint32 // Number of ledgers processed.
@@ -157,9 +157,9 @@ func (s *Scanner) worker(ctx context.Context, wid uint32, resultsCh chan result,
 // The range is divided into scan tasks based on the configured task size,
 // each processed concurrently by a worker. The first task error cancels
 // all workers. A final aggregated report is returned.
-func (s *Scanner) Run(ctx context.Context, from, to uint32) (report, error) {
+func (s *Scanner) Run(ctx context.Context, from, to uint32) (Report, error) {
 	if from > to {
-		return report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
+		return Report{}, fmt.Errorf("invalid range: from=%d greater than to=%d", from, to)
 	}
 
 	// If the datastore contains no viable ledger files at all,
@@ -168,19 +168,19 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (report, error) {
 	if findErr != nil {
 		if errors.Is(findErr, datastore.ErrNoValidLedgerFiles) {
 			missing := uint64(to) - uint64(from) + 1
-			return report{
-				Gaps:         []gap{{Start: from, End: to}},
-				TotalFound:   0,
-				TotalMissing: missing,
+			return Report{
+				Gaps:                []Gap{{Start: from, End: to}},
+				TotalLedgersFound:   0,
+				TotalLedgersMissing: uint32(missing),
 			}, nil
 		}
-		return report{}, fmt.Errorf("datastore error: %w", findErr)
+		return Report{}, fmt.Errorf("datastore error: %w", findErr)
 	}
 
 	// Compute scan tasks using normalized task size.
 	tasks, err := s.computeTasks(from, to)
 	if err != nil {
-		return report{}, fmt.Errorf("failed to compute tasks for range [%d-%d]: %w", from, to, err)
+		return Report{}, fmt.Errorf("failed to compute tasks for range [%d-%d]: %w", from, to, err)
 	}
 
 	// Use at most one worker per task.
@@ -196,7 +196,7 @@ func (s *Scanner) Run(ctx context.Context, from, to uint32) (report, error) {
 		case tasksCh <- p:
 		case <-scanCtx.Done():
 			close(tasksCh)
-			return report{}, scanCtx.Err()
+			return Report{}, scanCtx.Err()
 		}
 	}
 	close(tasksCh)
@@ -246,20 +246,29 @@ func (s *Scanner) computeTasks(from, to uint32) ([]task, error) {
 		return nil, fmt.Errorf("invalid task size: must be greater than 0")
 	}
 
-	total := uint64(to) - uint64(from) + 1
+	// Align the outer range to ledger-file boundaries so that each task
+	// starts and ends on a ledger boundary.
+	start := s.schema.GetSequenceNumberStartBoundary(from)
+	end := s.schema.GetSequenceNumberEndBoundary(to)
+
+	if start > end {
+		return nil, fmt.Errorf("invalid aligned range: start (%d) greater than end (%d)", start, end)
+	}
+
+	total := uint64(end) - uint64(start) + 1
 	capacity := (total + uint64(s.taskSize) - 1) / uint64(s.taskSize)
 	tasks := make([]task, 0, capacity)
 
-	for low := from; low <= to; {
+	for low := start; low <= end; {
 		high64 := uint64(low) + uint64(s.taskSize) - 1
 		var high uint32
-		if high64 > uint64(to) {
-			high = to
+		if high64 > uint64(end) {
+			high = end
 		} else {
 			high = uint32(high64)
 		}
-		tasks = append(tasks, task{low: low, high: high})
-		if high == to {
+		tasks = append(tasks, task{low: max(2, low), high: high})
+		if high == end {
 			break
 		}
 		low = high + 1

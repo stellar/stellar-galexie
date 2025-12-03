@@ -6,14 +6,14 @@ import (
 	"github.com/stellar/go-stellar-sdk/support/log"
 )
 
-// aggregator accumulates ledger scan results and merges contiguous gap ranges.
+// aggregator accumulates ledger scan results and merges contiguous Gap ranges.
 type aggregator struct {
 	logger     *log.Entry
 	totalFound uint32
 	minFound   uint32
 	maxFound   uint32
 	hasData    bool
-	gaps       []gap
+	gaps       []Gap
 }
 
 // newAggregator creates a new, non-thread-safe aggregator.
@@ -43,12 +43,12 @@ func (a *aggregator) add(res result) {
 	}
 }
 
-func (a *aggregator) finalize() report {
+func (a *aggregator) finalize() Report {
 	// This should not occur in normal scans.
 	// This state only happens if all tasks  are canceled
 	// before producing any results.
 	if !a.hasData && len(a.gaps) == 0 {
-		return report{}
+		return Report{}
 	}
 
 	finalGaps := sortAndMergeGaps(a.gaps)
@@ -65,16 +65,16 @@ func (a *aggregator) finalize() report {
 		}).Info("report generation complete")
 	}
 
-	return report{
-		Gaps:         finalGaps,
-		TotalFound:   a.totalFound,
-		TotalMissing: totalMissing,
-		MinFound:     a.minFound,
-		MaxFound:     a.maxFound,
+	return Report{
+		Gaps:                finalGaps,
+		TotalLedgersFound:   a.totalFound,
+		TotalLedgersMissing: uint32(totalMissing),
+		MinSequenceFound:    a.minFound,
+		MaxSequenceFound:    a.maxFound,
 	}
 }
 
-func sortAndMergeGaps(gaps []gap) []gap {
+func sortAndMergeGaps(gaps []Gap) []Gap {
 	if len(gaps) <= 1 {
 		return gaps
 	}
