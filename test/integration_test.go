@@ -259,6 +259,44 @@ func (s *GalexieTestSuite) TestAppendUnbounded() {
 	}, 180*time.Second, 50*time.Millisecond, "append unbounded did not work")
 }
 
+func (s *GalexieTestSuite) TestAppendUnboundedSequenceNumber2() {
+	require := s.Require()
+
+	rootCmd := cmd.DefineCommands()
+	rootCmd.SetArgs([]string{
+		"append",
+		"--start", "2",
+		"--config-file", s.tempConfigFile,
+	})
+
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+
+	cmdErrCh := make(chan error, 1)
+	go func() {
+		cmdErrCh <- rootCmd.ExecuteContext(ctx)
+	}()
+
+	datastore, err := datastore.NewDataStore(ctx, s.config.DataStoreConfig)
+	require.NoError(err)
+
+	require.Eventually(
+		func() bool {
+			_, err := datastore.GetFile(
+				ctx,
+				"FFFFFFFF--0-9/FFFFFFFD--2.xdr."+compressxdr.DefaultCompressor.Name(),
+			)
+			return err == nil
+		},
+		60*time.Second,
+		100*time.Millisecond,
+		"append unbounded did not work",
+	)
+
+	cancel()
+	require.NoError(<-cmdErrCh)
+}
+
 func (s *GalexieTestSuite) TestDetectGaps() {
 	require := s.Require()
 

@@ -35,7 +35,7 @@ require (
 	github.com/docker/docker v28.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/fsouza/fake-gcs-server v1.49.2
-	github.com/stellar/go-stellar-sdk v0.0.0-20251208182759-7568ee53f4fd
+	github.com/stellar/go-stellar-sdk v0.0.0-20251210093830-27970a00c2d7
 )
 
 require (
