@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -405,12 +406,19 @@ func TestRun_CallsScanForEachTask(t *testing.T) {
 	sc := newMockScanner(t, 3, 10)
 	sc.schema.LedgersPerFile = 10
 
-	var minN, maxN atomic.Uint32
-	minN.Store(^uint32(0))
-	var calls atomic.Int32
+	var (
+		mu    sync.Mutex
+		lows  []uint32
+		highs []uint32
+		calls atomic.Int32
+	)
+
 	sc.scan = func(ctx context.Context, p task) (result, error) {
-		minN.Store(min(minN.Load(), p.low))
-		maxN.Store(max(maxN.Load(), p.high))
+		mu.Lock()
+		lows = append(lows, p.low)
+		highs = append(highs, p.high)
+		mu.Unlock()
+
 		calls.Add(1)
 		return result{count: p.high - p.low + 1}, nil
 	}
@@ -418,10 +426,24 @@ func TestRun_CallsScanForEachTask(t *testing.T) {
 	_, err := sc.Run(context.Background(), 1, 30)
 	require.NoError(t, err)
 
-	// 1..30 with taskSize=10 and ledgersPerFile = 10 => 4 task (2-9, 10-19, 20-29, 30-39)
+	require.NotEmpty(t, lows)
+	require.Equal(t, len(lows), len(highs))
+
+	minN := lows[0]
+	maxN := highs[0]
+	for i := range lows {
+		if lows[i] < minN {
+			minN = lows[i]
+		}
+		if highs[i] > maxN {
+			maxN = highs[i]
+		}
+	}
+
+	// 1..30 with taskSize=10 and ledgersPerFile = 10 => 4 tasks (2-9, 10-19, 20-29, 30-39)
 	assert.Equal(t, int32(4), calls.Load())
-	assert.Equal(t, uint32(2), minN.Load())
-	assert.Equal(t, uint32(39), maxN.Load())
+	assert.Equal(t, uint32(2), minN)
+	assert.Equal(t, uint32(39), maxN)
 }
 
 func TestRun_DataStoreError(t *testing.T) {
