@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Pending]
+## [v25.0.0]
 
 ## New Features
  - Added `futurenet` support to Galexie network configuration parameter ([#42](https://github.com/stellar/stellar-galexie/pull/42)).
@@ -16,6 +16,10 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
     ```
          galexie detect-gaps --start <start_ledger> --end <end_ledger> --output-file gaps.json
     ```
+
+### Bug Fixes
+
+- Updated `go-stellar-sdk` to pick up the fix for captive core online mode not replaying sequence 2 ([#5866](https://github.com/stellar/go-stellar-sdk/issues/5866), [#36](https://github.com/stellar/stellar-galexie/issues/36))
 
 ## [v24.1.0]
 
