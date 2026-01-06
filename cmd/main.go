@@ -150,12 +150,20 @@ func DefineCommands() *cobra.Command {
 			return galexieCmdRunner(settings)
 		},
 	}
+	var versionCmd = &cobra.Command{
+		Use:   "version",
+		Short: "Print the version of galexie",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Fprintf(cmd.OutOrStdout(), "stellar-galexie %s\n", galexie.Version())
+		},
+	}
 
 	rootCmd.AddCommand(scanAndFillCmd)
 	rootCmd.AddCommand(appendCmd)
 	rootCmd.AddCommand(ReplaceCmd)
 	rootCmd.AddCommand(detectGapsCmd)
 	rootCmd.AddCommand(loadTestCmd)
+	rootCmd.AddCommand(versionCmd)
 
 	commonFlags := pflag.NewFlagSet("common_flags", pflag.ExitOnError)
 	commonFlags.Uint32P("start", "s", 0, "Starting ledger (inclusive), must be set to a value greater than 1")

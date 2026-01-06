@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	galexie "github.com/stellar/stellar-galexie/internal"
 )
@@ -227,4 +228,18 @@ func TestFlagsOutput(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVersionCommand(t *testing.T) {
+	rootCmd := DefineCommands()
+	rootCmd.SetArgs([]string{"version"})
+
+	var outWriter bytes.Buffer
+	rootCmd.SetOut(&outWriter)
+
+	err := rootCmd.Execute()
+	require.NoError(t, err)
+
+	output := outWriter.String()
+	assert.Equal(t, "stellar-galexie "+galexie.Version()+"\n", output)
 }
