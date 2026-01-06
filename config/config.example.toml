@@ -7,7 +7,7 @@ admin_port = 6061
 
 # Datastore Configuration
 [datastore_config]
-# Specifies the type of datastore. Currently, Google Cloud Storage (GCS) and s3-compatible storage (S3) are supported.
+# Specifies the type of datastore. Currently, Google Cloud Storage (GCS), s3-compatible storage (S3), and Filesystem.
 type = "GCS"
 
 [datastore_config.params]
@@ -24,6 +24,12 @@ destination_bucket_path = "your-bucket-name/<optional_subpath1>/<optional_subpat
 # The endpoint URL for the S3-compatible storage. If you are using Amazon S3, you can leave this commented out.
 # The below example is for Cloudflare R2, but you can replace it with your S3-compatible storage endpoint.
 #endpoint_url = "https://00000000000000000000000000000000.cloudflarestorage.com"
+
+# params required for Filesystem storage
+# The local filesystem path for storing data.
+#destination_path = "/path/to/local/storage"
+# Optional: disable metadata sidecar files (default: true)
+#write_metadata = "false"
 
 [datastore_config.schema]
 # Configuration for data organization
