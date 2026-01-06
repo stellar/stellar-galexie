@@ -144,4 +144,4 @@ require (
 	gotest.tools/v3 v3.5.2 // indirect
 )
 
-replace github.com/stellar/go-stellar-sdk => github.com/stellar/go-stellar-sdk v0.0.0-20260106194513-0218f0a1a277
+replace github.com/stellar/go-stellar-sdk => github.com/stellar/go-stellar-sdk v0.0.0-20260106213347-6dbbccc633b8
