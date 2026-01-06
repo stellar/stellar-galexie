@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
 	"sync"
 	"syscall"
 	"time"
@@ -48,6 +49,21 @@ var (
 	logger  = log.New().WithField("service", nameSpace)
 	version = "develop"
 )
+
+func init() {
+	if version == "develop" {
+		// Fallback to build info version if not set via ldflags. This preserves
+		// the version when installed via `go install`, which embeds version info.
+		// Ignore "(devel)" which Go returns for local builds to preserve "develop".
+		if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+			version = bi.Main.Version
+		}
+	}
+}
+
+func Version() string {
+	return version
+}
 
 func NewDataAlreadyExportedError(Start uint32, End uint32) *DataAlreadyExportedError {
 	return &DataAlreadyExportedError{
