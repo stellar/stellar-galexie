@@ -7,7 +7,7 @@ admin_port = 6061
 
 # Datastore Configuration
 [datastore_config]
-# Specifies the type of datastore. Currently, Google Cloud Storage (GCS), s3-compatible storage (S3), and Filesystem.
+# Specifies the type of datastore. Currently, Google Cloud Storage (GCS), s3-compatible storage (S3), and Filesystem are supported.
 type = "GCS"
 
 [datastore_config.params]
