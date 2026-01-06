@@ -26,10 +26,11 @@ destination_bucket_path = "your-bucket-name/<optional_subpath1>/<optional_subpat
 #endpoint_url = "https://00000000000000000000000000000000.cloudflarestorage.com"
 
 # params required for Filesystem storage
+# Note: Filesystem storage is not recommended for production use. It is
+# intended for development and testing purposes only.
+# This implementation does not support storing metadata.
 # The local filesystem path for storing data.
 #destination_path = "/path/to/local/storage"
-# Optional: disable metadata sidecar files (default: true)
-#write_metadata = "false"
 
 [datastore_config.schema]
 # Configuration for data organization
