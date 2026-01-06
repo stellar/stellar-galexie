@@ -74,6 +74,18 @@ func TestGalexieS3TestSuite(t *testing.T) {
 	suite.Run(t, galexieS3Suite)
 }
 
+// TestGalexieFilesystemTestSuite runs tests with Filesystem backend
+func TestGalexieFilesystemTestSuite(t *testing.T) {
+	if os.Getenv("GALEXIE_INTEGRATION_TESTS_ENABLED") != "true" {
+		t.Skip("skipping integration test: GALEXIE_INTEGRATION_TESTS_ENABLED not true")
+	}
+
+	galexieFilesystemSuite := &GalexieTestSuite{
+		storageType: "Filesystem",
+	}
+	suite.Run(t, galexieFilesystemSuite)
+}
+
 type GalexieTestSuite struct {
 	suite.Suite
 	tempConfigFile        string
@@ -86,7 +98,8 @@ type GalexieTestSuite struct {
 	gcsServer             *fakestorage.Server
 	finishedSetup         bool
 	config                galexie.Config
-	storageType           string // "GCS" or "S3"
+	storageType           string // "GCS", "S3", or "Filesystem"
+	filesystemDataPath    string // temp directory for Filesystem storage
 }
 
 func (s *GalexieTestSuite) TestScanAndFill() {
@@ -376,6 +389,12 @@ func (s *GalexieTestSuite) buildConfigFromTemplate(
 		filepath.Join(s.testTempDir, "captive-core"))
 	galexieConfigTemplate.Set("datastore_config.type", s.storageType)
 
+	// Set storage-specific params
+	if s.storageType == "Filesystem" {
+		galexieConfigTemplate.Set("datastore_config.params.destination_path",
+			filepath.Join(s.testTempDir, "filesystem-data"))
+	}
+
 	// Apply any per-config overrides
 	if mutate != nil {
 		mutate(galexieConfigTemplate)
@@ -479,6 +498,8 @@ func (s *GalexieTestSuite) SetupTest() {
 		s.setupGCS(t)
 	} else if s.storageType == "S3" {
 		s.setupS3(t)
+	} else if s.storageType == "Filesystem" {
+		s.setupFilesystem(t)
 	}
 }
 
@@ -490,6 +511,12 @@ func (s *GalexieTestSuite) TearDownTest() {
 		s.T().Logf("Stopping the localstack container %v", s.localStackContainerID)
 		s.stopAndLogContainer(s.localStackContainerID, "localstack")
 		s.localStackContainerID = ""
+	} else if s.storageType == "Filesystem" && s.filesystemDataPath != "" {
+		// Clean up filesystem data between tests
+		if err := os.RemoveAll(s.filesystemDataPath); err != nil {
+			s.T().Logf("Failed to clean up filesystem data path: %v", err)
+		}
+		s.filesystemDataPath = ""
 	}
 }
 
@@ -777,6 +804,15 @@ func (s *GalexieTestSuite) setupS3(t *testing.T) {
 
 	t.Setenv("AWS_ACCESS_KEY_ID", "KEY_ID")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "ACCESS_KEY")
+}
+
+func (s *GalexieTestSuite) setupFilesystem(t *testing.T) {
+	// Use the path configured in buildConfigFromTemplate
+	s.filesystemDataPath = filepath.Join(s.testTempDir, "filesystem-data")
+	// Clean any existing data from previous tests
+	require.NoError(t, os.RemoveAll(s.filesystemDataPath))
+	require.NoError(t, os.MkdirAll(s.filesystemDataPath, 0755))
+	t.Logf("Filesystem datastore path: %s", s.filesystemDataPath)
 }
 
 func (s *GalexieTestSuite) TearDownSuite() {
