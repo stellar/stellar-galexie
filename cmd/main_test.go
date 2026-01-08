@@ -243,3 +243,101 @@ func TestVersionCommand(t *testing.T) {
 	output := outWriter.String()
 	assert.Equal(t, "stellar-galexie "+galexie.Version()+"\n", output)
 }
+
+func TestLedgerPathCommand(t *testing.T) {
+	// Test config file with proper schema settings
+	testConfigFile := "../internal/test/64perfile.toml"
+
+	testCases := []struct {
+		name              string
+		commandArgs       []string
+		expectedOutput    string
+		expectedErrOutput string
+		expectError       bool
+	}{
+		{
+			name:           "single ledger number",
+			commandArgs:    []string{"ledger-path", "3811", "--config-file", testConfigFile},
+			expectedOutput: "Ledger file path: FFFFF13F--3776-3839.xdr.zst\n",
+			expectError:    false,
+		},
+		{
+			name:           "single ledger with plain output",
+			commandArgs:    []string{"ledger-path", "3811", "--plain", "--config-file", testConfigFile},
+			expectedOutput: "FFFFF13F--3776-3839.xdr.zst\n",
+			expectError:    false,
+		},
+		{
+			name:           "ledger range",
+			commandArgs:    []string{"ledger-path", "--start", "100", "--end", "200", "--config-file", testConfigFile},
+			expectedOutput: "Ledger file path: FFFFFFBF--64-127.xdr.zst\nLedger file path: FFFFFF7F--128-191.xdr.zst\nLedger file path: FFFFFF3F--192-255.xdr.zst\n",
+			expectError:    false,
+		},
+		{
+			name:           "ledger range with plain output",
+			commandArgs:    []string{"ledger-path", "--start", "100", "--end", "200", "--plain", "--config-file", testConfigFile},
+			expectedOutput: "FFFFFFBF--64-127.xdr.zst\nFFFFFF7F--128-191.xdr.zst\nFFFFFF3F--192-255.xdr.zst\n",
+			expectError:    false,
+		},
+		{
+			name:           "start ledger only",
+			commandArgs:    []string{"ledger-path", "--start", "100", "--config-file", testConfigFile},
+			expectedOutput: "Ledger file path: FFFFFFBF--64-127.xdr.zst\n",
+			expectError:    false,
+		},
+		{
+			name:              "missing ledger argument",
+			commandArgs:       []string{"ledger-path", "--config-file", testConfigFile},
+			expectedErrOutput: "please specify a ledger number or use --start/--end flags",
+			expectError:       true,
+		},
+		{
+			name:              "invalid ledger number",
+			commandArgs:       []string{"ledger-path", "abc", "--config-file", testConfigFile},
+			expectedErrOutput: "invalid ledger number: abc",
+			expectError:       true,
+		},
+		{
+			name:              "invalid ledger number zero",
+			commandArgs:       []string{"ledger-path", "0", "--config-file", testConfigFile},
+			expectedErrOutput: "invalid ledger number: 0",
+			expectError:       true,
+		},
+		{
+			name:              "end less than start",
+			commandArgs:       []string{"ledger-path", "--start", "200", "--end", "100", "--config-file", testConfigFile},
+			expectedErrOutput: "end ledger (100) must be greater than or equal to start ledger (200)",
+			expectError:       true,
+		},
+		{
+			name:              "config file not found",
+			commandArgs:       []string{"ledger-path", "100", "--config-file", "nonexistent.toml"},
+			expectedErrOutput: "config file nonexistent.toml was not found",
+			expectError:       true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rootCmd := DefineCommands()
+			rootCmd.SetArgs(tc.commandArgs)
+
+			var outWriter bytes.Buffer
+			var errWriter bytes.Buffer
+			rootCmd.SetOut(&outWriter)
+			rootCmd.SetErr(&errWriter)
+
+			err := rootCmd.Execute()
+
+			if tc.expectError {
+				require.Error(t, err)
+				errOutput := errWriter.String()
+				assert.Contains(t, errOutput, tc.expectedErrOutput)
+			} else {
+				require.NoError(t, err)
+				output := outWriter.String()
+				assert.Equal(t, tc.expectedOutput, output)
+			}
+		})
+	}
+}

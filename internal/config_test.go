@@ -498,3 +498,87 @@ func TestAdjustedLedgerRangeUnBoundedMode(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadSchemaConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		configFile    string
+		expectError   bool
+		errorContains string
+		expectedLPF   uint32
+		expectedFPP   uint32
+	}{
+		{
+			name:        "valid config with 64 ledgers per file",
+			configFile:  "test/64perfile.toml",
+			expectError: false,
+			expectedLPF: 64,
+			expectedFPP: 0,
+		},
+		{
+			name:        "valid config with 1 ledger per file",
+			configFile:  "test/1perfile.toml",
+			expectError: false,
+			expectedLPF: 1,
+			expectedFPP: 0,
+		},
+		{
+			name:          "config file not found",
+			configFile:    "test/nonexistent.toml",
+			expectError:   true,
+			errorContains: "config file test/nonexistent.toml was not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schema, err := LoadSchemaConfig(tt.configFile)
+
+			if tt.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.errorContains)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedLPF, schema.LedgersPerFile)
+				require.Equal(t, tt.expectedFPP, schema.FilesPerPartition)
+			}
+		})
+	}
+}
+
+func TestLoadDataStoreConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		configFile    string
+		expectError   bool
+		errorContains string
+		expectedType  string
+	}{
+		{
+			name:         "valid config",
+			configFile:   "test/test-pubnet.toml",
+			expectError:  false,
+			expectedType: "ABC",
+		},
+		{
+			name:          "config file not found",
+			configFile:    "test/nonexistent.toml",
+			expectError:   true,
+			errorContains: "config file test/nonexistent.toml was not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dsConfig, err := LoadDataStoreConfig(tt.configFile)
+
+			if tt.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.errorContains)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedType, dsConfig.Type)
+			}
+		})
+	}
+}
