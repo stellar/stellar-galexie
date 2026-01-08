@@ -9,9 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"github.com/stellar/go-stellar-sdk/support/datastore"
 	"github.com/stellar/go-stellar-sdk/support/strutils"
 
-	"github.com/stellar/stellar-galexie/internal"
+	galexie "github.com/stellar/stellar-galexie/internal"
 )
 
 var (
@@ -157,6 +158,23 @@ func DefineCommands() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "stellar-galexie %s\n", galexie.Version())
 		},
 	}
+	var ledgerPathCmd = &cobra.Command{
+		Use:   "ledger-path <ledger_number>",
+		Short: "Get the file path for a ledger number in the datastore",
+		Long: `Prints the file path for a given ledger number based on the datastore schema configuration.
+
+Examples:
+  # Get the file path for ledger 3811
+  galexie ledger-path 3811 --config-file config.toml
+
+  # Get file paths for a range of ledgers (machine-readable output)
+  galexie ledger-path --start 100 --end 200 --plain --config-file config.toml
+
+  # Check if ledger file exists in the datastore
+  galexie ledger-path 3811 --check-exists --config-file config.toml`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: runLedgerPathCmd,
+	}
 
 	rootCmd.AddCommand(scanAndFillCmd)
 	rootCmd.AddCommand(appendCmd)
@@ -164,6 +182,7 @@ func DefineCommands() *cobra.Command {
 	rootCmd.AddCommand(detectGapsCmd)
 	rootCmd.AddCommand(loadTestCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(ledgerPathCmd)
 
 	commonFlags := pflag.NewFlagSet("common_flags", pflag.ExitOnError)
 	commonFlags.Uint32P("start", "s", 0, "Starting ledger (inclusive), must be set to a value greater than 1")
@@ -195,6 +214,13 @@ func DefineCommands() *cobra.Command {
 	loadTestCmd.PersistentFlags().Float64("close-duration", 2.0, "the time (in seconds) it takes to close ledgers in the ingestion load test.")
 	loadTestCmd.PersistentFlags().String("config-file", "config.toml", "Path to the TOML config file. Defaults to 'config.toml' on runtime working directory path.")
 	viper.BindPFlags(loadTestCmd.PersistentFlags())
+
+	ledgerPathCmd.PersistentFlags().Uint32P("start", "s", 0, "Starting ledger (inclusive) for range queries. If provided without 'end', prints paths for all ledgers from 'start' to the ledger argument.")
+	ledgerPathCmd.PersistentFlags().Uint32P("end", "e", 0, "Ending ledger (inclusive) for range queries. Must be greater than or equal to 'start'.")
+	ledgerPathCmd.PersistentFlags().String("config-file", "config.toml", "Path to the TOML config file. Defaults to 'config.toml' on runtime working directory path.")
+	ledgerPathCmd.PersistentFlags().Bool("check-exists", false, "Check if the ledger file exists in the datastore. Exit code 0 if found, 1 if not found.")
+	ledgerPathCmd.PersistentFlags().Bool("plain", false, "Output only file paths, one per line (useful for scripting).")
+	viper.BindPFlags(ledgerPathCmd.PersistentFlags())
 
 	return rootCmd
 }
@@ -246,4 +272,121 @@ func bindLoadTestCliParameters(startFlag *pflag.Flag, endFlag *pflag.Flag, merge
 	settings.ConfigFilePath = viper.GetString(configFileFlag.Name)
 
 	return settings
+}
+
+func runLedgerPathCmd(cmd *cobra.Command, args []string) error {
+	// Get flags
+	configFile, _ := cmd.Flags().GetString("config-file")
+	checkExists, _ := cmd.Flags().GetBool("check-exists")
+	plainOutput, _ := cmd.Flags().GetBool("plain")
+	startLedger, _ := cmd.Flags().GetUint32("start")
+	endLedger, _ := cmd.Flags().GetUint32("end")
+
+	// Determine ledger(s) to process
+	var ledgers []uint32
+
+	if len(args) > 0 {
+		// Parse the ledger number from args
+		var ledger uint64
+		_, err := fmt.Sscanf(args[0], "%d", &ledger)
+		if err != nil || ledger == 0 || ledger > uint64(^uint32(0)) {
+			return fmt.Errorf("invalid ledger number: %s", args[0])
+		}
+		ledgers = append(ledgers, uint32(ledger))
+	} else if startLedger > 0 {
+		// Use range from start to end
+		if endLedger == 0 {
+			endLedger = startLedger
+		}
+		if endLedger < startLedger {
+			return fmt.Errorf("end ledger (%d) must be greater than or equal to start ledger (%d)", endLedger, startLedger)
+		}
+		for l := startLedger; l <= endLedger; l++ {
+			ledgers = append(ledgers, l)
+		}
+	} else {
+		return fmt.Errorf("please specify a ledger number or use --start/--end flags")
+	}
+
+	// Load schema config
+	schema, err := galexie.LoadSchemaConfig(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// If checking existence, we need to connect to the datastore
+	var ds datastore.DataStore
+	if checkExists {
+		dsConfig, err := galexie.LoadDataStoreConfig(configFile)
+		if err != nil {
+			return fmt.Errorf("failed to load datastore config: %w", err)
+		}
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		ds, err = datastore.NewDataStore(ctx, dsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to connect to datastore: %w", err)
+		}
+		defer ds.Close()
+
+		// Load schema from datastore if available
+		loadedSchema, err := datastore.LoadSchema(ctx, ds, dsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to load schema from datastore: %w", err)
+		}
+		schema = loadedSchema
+	}
+
+	// Track unique paths (ledgers in the same file will have the same path)
+	seenPaths := make(map[string]bool)
+	var notFoundCount int
+
+	for _, ledger := range ledgers {
+		path := schema.GetObjectKeyFromSequenceNumber(ledger)
+
+		// Skip duplicate paths (for range queries)
+		if seenPaths[path] {
+			continue
+		}
+		seenPaths[path] = true
+
+		if checkExists {
+			ctx := cmd.Context()
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			exists, err := ds.Exists(ctx, path)
+			if err != nil {
+				return fmt.Errorf("failed to check existence: %w", err)
+			}
+
+			if plainOutput {
+				if exists {
+					fmt.Fprintln(cmd.OutOrStdout(), path)
+				}
+			} else {
+				if exists {
+					fmt.Fprintf(cmd.OutOrStdout(), "Ledger file found: %s\n", path)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "Ledger file not found for ledger number %d: %s\n", ledger, path)
+					notFoundCount++
+				}
+			}
+		} else {
+			if plainOutput {
+				fmt.Fprintln(cmd.OutOrStdout(), path)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "Ledger file path: %s\n", path)
+			}
+		}
+	}
+
+	// Exit with non-zero code if checking existence and some files not found
+	if checkExists && notFoundCount > 0 {
+		return fmt.Errorf("not all ledger files were found (%d missing)", notFoundCount)
+	}
+
+	return nil
 }

@@ -37,6 +37,7 @@ const (
 	Replace
 	DetectGaps
 	LoadTest
+	LedgerPath
 )
 
 func (m Mode) Name() string {
@@ -51,6 +52,8 @@ func (m Mode) Name() string {
 		return "Detect Gaps"
 	case LoadTest:
 		return "Load Test"
+	case LedgerPath:
+		return "Ledger Path"
 	}
 	return "none"
 }
@@ -68,7 +71,7 @@ func (m Mode) LoadTest() bool {
 }
 
 func (m Mode) Export() bool {
-	return m != DetectGaps
+	return m != DetectGaps && m != LedgerPath
 }
 
 func (m Mode) Replace() bool {
@@ -411,4 +414,46 @@ func countLoadTestLedgers(path string) (uint32, error) {
 	}
 
 	return ledgersCount, nil
+}
+
+// LoadSchemaConfig loads just the datastore schema configuration from a TOML file.
+// This is a lightweight config loading function for utility commands that only need
+// the schema information to compute ledger paths.
+func LoadSchemaConfig(configFilePath string) (datastore.DataStoreSchema, error) {
+	cfg, err := toml.LoadFile(configFilePath)
+	if err != nil {
+		return datastore.DataStoreSchema{}, errors.Wrapf(err, "config file %v was not found", configFilePath)
+	}
+
+	var config Config
+	if err = cfg.Unmarshal(&config); err != nil {
+		return datastore.DataStoreSchema{}, errors.Wrap(err, "Error unmarshalling TOML config.")
+	}
+
+	schema := config.DataStoreConfig.Schema
+	if schema.LedgersPerFile == 0 {
+		return datastore.DataStoreSchema{}, errors.New("invalid schema config: ledgers_per_file must be greater than 0")
+	}
+
+	return schema, nil
+}
+
+// LoadDataStoreConfig loads the datastore configuration from a TOML file.
+// This is used for utility commands that need to connect to the datastore.
+func LoadDataStoreConfig(configFilePath string) (datastore.DataStoreConfig, error) {
+	cfg, err := toml.LoadFile(configFilePath)
+	if err != nil {
+		return datastore.DataStoreConfig{}, errors.Wrapf(err, "config file %v was not found", configFilePath)
+	}
+
+	var config Config
+	if err = cfg.Unmarshal(&config); err != nil {
+		return datastore.DataStoreConfig{}, errors.Wrap(err, "Error unmarshalling TOML config.")
+	}
+
+	if config.DataStoreConfig.Schema.LedgersPerFile == 0 {
+		return datastore.DataStoreConfig{}, errors.New("invalid schema config: ledgers_per_file must be greater than 0")
+	}
+
+	return config.DataStoreConfig, nil
 }
