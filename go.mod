@@ -35,7 +35,7 @@ require (
 	github.com/docker/docker v28.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/fsouza/fake-gcs-server v1.49.2
-	github.com/stellar/go-stellar-sdk v0.0.0-20251210093830-27970a00c2d7
+	github.com/stellar/go-stellar-sdk v0.0.0-20260108045717-08ad73d9ed0e
 )
 
 require (
@@ -143,5 +143,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
-
-replace github.com/stellar/go-stellar-sdk => github.com/stellar/go-stellar-sdk v0.0.0-20260106221911-f8fc5adebaaa
