@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v25.1.0]
+
+### New Features
+- Added `filesystem` datastore support ([#53](https://github.com/stellar/stellar-galexie/pull/53))
+   - Galexie can now be configured to use local filesystem storage in addition to GCS and S3.
+   - Intended for testing and development, not production use.
+- Added `version` command ([#54](https://github.com/stellar/stellar-galexie/pull/54))
+   - New `stellar-galexie version` command displays the application version.
+
 ## [v25.0.0]
 
 ## New Features
