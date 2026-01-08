@@ -99,7 +99,10 @@ type GalexieTestSuite struct {
 	finishedSetup         bool
 	config                galexie.Config
 	storageType           string // "GCS", "S3", or "Filesystem"
-	filesystemDataPath    string // temp directory for Filesystem storage
+}
+
+func (s *GalexieTestSuite) filesystemDataPath() string {
+	return filepath.Join(s.testTempDir, "filesystem-data")
 }
 
 func (s *GalexieTestSuite) TestScanAndFill() {
@@ -392,7 +395,7 @@ func (s *GalexieTestSuite) buildConfigFromTemplate(
 	// Set storage-specific params
 	if s.storageType == "Filesystem" {
 		galexieConfigTemplate.Set("datastore_config.params.destination_path",
-			filepath.Join(s.testTempDir, "filesystem-data"))
+			s.filesystemDataPath())
 	}
 
 	// Apply any per-config overrides
@@ -511,12 +514,11 @@ func (s *GalexieTestSuite) TearDownTest() {
 		s.T().Logf("Stopping the localstack container %v", s.localStackContainerID)
 		s.stopAndLogContainer(s.localStackContainerID, "localstack")
 		s.localStackContainerID = ""
-	} else if s.storageType == "Filesystem" && s.filesystemDataPath != "" {
+	} else if s.storageType == "Filesystem" {
 		// Clean up filesystem data between tests
-		if err := os.RemoveAll(s.filesystemDataPath); err != nil {
+		if err := os.RemoveAll(s.filesystemDataPath()); err != nil {
 			s.T().Logf("Failed to clean up filesystem data path: %v", err)
 		}
-		s.filesystemDataPath = ""
 	}
 }
 
@@ -807,12 +809,11 @@ func (s *GalexieTestSuite) setupS3(t *testing.T) {
 }
 
 func (s *GalexieTestSuite) setupFilesystem(t *testing.T) {
-	// Use the path configured in buildConfigFromTemplate
-	s.filesystemDataPath = filepath.Join(s.testTempDir, "filesystem-data")
+	path := s.filesystemDataPath()
 	// Clean any existing data from previous tests
-	require.NoError(t, os.RemoveAll(s.filesystemDataPath))
-	require.NoError(t, os.MkdirAll(s.filesystemDataPath, 0755))
-	t.Logf("Filesystem datastore path: %s", s.filesystemDataPath)
+	require.NoError(t, os.RemoveAll(path))
+	require.NoError(t, os.MkdirAll(path, 0755))
+	t.Logf("Filesystem datastore path: %s", path)
 }
 
 func (s *GalexieTestSuite) TearDownSuite() {
