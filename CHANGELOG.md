@@ -14,7 +14,7 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [v25.0.0]
 
-## New Features
+### New Features
  - Added `futurenet` support to Galexie network configuration parameter ([#42](https://github.com/stellar/stellar-galexie/pull/42)).
  - Added `detect-gaps` Command ([#43](https://github.com/stellar/stellar-galexie/pull/43))
     - New galexie `detect-gaps` command for scanning datastore to find any missing ledger sequences (gaps) within a specified range.
