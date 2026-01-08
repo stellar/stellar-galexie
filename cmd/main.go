@@ -282,6 +282,12 @@ func runLedgerPathCmd(cmd *cobra.Command, args []string) error {
 	startLedger, _ := cmd.Flags().GetUint32("start")
 	endLedger, _ := cmd.Flags().GetUint32("end")
 
+	// Initialize context once
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Determine ledger(s) to process
 	var ledgers []uint32
 
@@ -289,7 +295,7 @@ func runLedgerPathCmd(cmd *cobra.Command, args []string) error {
 		// Parse the ledger number from args
 		var ledger uint64
 		_, err := fmt.Sscanf(args[0], "%d", &ledger)
-		if err != nil || ledger == 0 || ledger > uint64(^uint32(0)) {
+		if err != nil || ledger == 0 {
 			return fmt.Errorf("invalid ledger number: %s", args[0])
 		}
 		ledgers = append(ledgers, uint32(ledger))
@@ -321,10 +327,6 @@ func runLedgerPathCmd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to load datastore config: %w", err)
 		}
-		ctx := cmd.Context()
-		if ctx == nil {
-			ctx = context.Background()
-		}
 		ds, err = datastore.NewDataStore(ctx, dsConfig)
 		if err != nil {
 			return fmt.Errorf("failed to connect to datastore: %w", err)
@@ -353,10 +355,6 @@ func runLedgerPathCmd(cmd *cobra.Command, args []string) error {
 		seenPaths[path] = true
 
 		if checkExists {
-			ctx := cmd.Context()
-			if ctx == nil {
-				ctx = context.Background()
-			}
 			exists, err := ds.Exists(ctx, path)
 			if err != nil {
 				return fmt.Errorf("failed to check existence: %w", err)
