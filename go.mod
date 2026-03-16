@@ -1,8 +1,6 @@
 module github.com/stellar/stellar-galexie
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.25
 
 require (
 	cloud.google.com/go/storage v1.42.0 // indirect
@@ -24,7 +22,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.17.0
-	github.com/stellar/go-xdr v0.0.0-20231122183749-b53fb00bcac2 // indirect
+	github.com/stellar/go-xdr v0.0.0-20260312225820-cc2b0611aabf // indirect
 	github.com/stretchr/testify v1.10.0
 	github.com/xdrpp/goxdr v0.1.1 // indirect
 	google.golang.org/api v0.183.0 // indirect
@@ -35,7 +33,7 @@ require (
 	github.com/docker/docker v28.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/fsouza/fake-gcs-server v1.49.2
-	github.com/stellar/go-stellar-sdk v0.0.0-20260108045717-08ad73d9ed0e
+	github.com/stellar/go-stellar-sdk v0.2.1-0.20260313232725-933f2764a55c
 )
 
 require (
