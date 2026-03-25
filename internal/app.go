@@ -50,6 +50,9 @@ var (
 	version = "develop"
 )
 
+// SetLogOutput redirects the package logger to the given writer.
+func SetLogOutput(w io.Writer) { logger.SetOutput(w) }
+
 func init() {
 	if version == "develop" {
 		// Fallback to build info version if not set via ldflags. This preserves

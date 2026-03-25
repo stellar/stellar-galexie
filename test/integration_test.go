@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,6 +104,66 @@ type GalexieTestSuite struct {
 
 func (s *GalexieTestSuite) filesystemDataPath() string {
 	return filepath.Join(s.testTempDir, "filesystem-data")
+}
+
+func (s *GalexieTestSuite) TestFindLatestLedgerSequence() {
+	require := s.Require()
+	schema := s.config.DataStoreConfig.Schema
+
+	cases := []struct {
+		name       string
+		bucketPath string // for GCS and S3
+		fsSubdir   string // for Filesystem
+		fsSlash    bool   // append trailing slash to Filesystem path
+	}{
+		{"no-prefix-no-trailing-slash", "fll-a", "", false},
+		{"no-prefix-trailing-slash", "fll-b/", "", true},
+		{"prefix-no-trailing-slash", "fll-c/sub", "sub", false},
+		{"prefix-trailing-slash", "fll-d/sub/", "sub", true},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			var mutate func(*toml.Tree)
+			if s.storageType == "Filesystem" {
+				dir := filepath.Join(s.testTempDir, "fll-"+tc.name, tc.fsSubdir)
+				require.NoError(os.MkdirAll(dir, 0755))
+				if tc.fsSlash {
+					dir += "/"
+				}
+				mutate = func(tree *toml.Tree) {
+					tree.Set("datastore_config.params.destination_path", dir)
+				}
+			} else {
+				s.ensureBucket(s.T(), tc.bucketPath)
+				mutate = func(tree *toml.Tree) {
+					tree.Set("datastore_config.params.destination_bucket_path", tc.bucketPath)
+				}
+			}
+
+			cfg, _, _ := s.buildConfigFromTemplate(
+				s.T(), "config-fll-"+tc.name+".toml", mutate,
+			)
+
+			ds, err := datastore.NewDataStore(s.ctx, cfg.DataStoreConfig)
+			require.NoError(err)
+
+			// Populate ledgers 2-7
+			for seq := uint32(2); seq <= 7; seq++ {
+				key := schema.GetObjectKeyFromSequenceNumber(seq)
+				err = ds.PutFile(s.ctx, key, bytes.NewReader([]byte("x")), nil)
+				require.NoError(err, "PutFile for ledger %d", seq)
+			}
+
+			latest, err := datastore.FindLatestLedgerSequence(s.ctx, ds)
+			require.NoError(err, "FindLatestLedgerSequence failed")
+			require.Equal(uint32(7), latest, "should detect ledger 7 as latest")
+
+			latestUpTo, err := datastore.FindLatestLedgerUpToSequence(s.ctx, ds, 9, cfg.DataStoreConfig.Schema)
+			require.NoError(err, "FindLatestLedgerUpToSequence failed")
+			require.Equal(uint32(7), latestUpTo, "should detect ledger 7 as latest up to 9")
+		})
+	}
 }
 
 func (s *GalexieTestSuite) TestScanAndFill() {
@@ -218,19 +279,25 @@ func (s *GalexieTestSuite) TestAppend() {
 	lastModified, err := datastore.GetFileLastModified(s.ctx, "FFFFFFFF--0-9/FFFFFFF9--6.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 
-	// now run an append on an overlapping range, it will resume past existing ledgers
+	// Run bounded append on an overlapping range and capture log output.
+	// Append should detect ledger 7 as the last and resume from 8.
+	var logBuf bytes.Buffer
+	galexie.SetLogOutput(&logBuf)
+	defer galexie.SetLogOutput(os.Stderr)
+
+	rootCmd = cmd.DefineCommands()
 	rootCmd.SetArgs([]string{"append", "--start", "6", "--end", "9", "--config-file", s.tempConfigFile})
-	var errWriter bytes.Buffer
-	var outWriter bytes.Buffer
-	rootCmd.SetErr(&errWriter)
-	rootCmd.SetOut(&outWriter)
 	err = rootCmd.ExecuteContext(s.ctx)
 	require.NoError(err)
 
-	output := outWriter.String()
-	errOutput := errWriter.String()
-	s.T().Log(output)
-	s.T().Log(errOutput)
+	logOutput := logBuf.String()
+	s.T().Log(logOutput)
+
+	// Verify the resume detection via log output
+	require.Contains(logOutput, "will resume at later start ledger of 8",
+		"append should detect ledger 7 as last and resume from 8")
+	require.Contains(logOutput, "start=8, end=9",
+		"final computed range should start at 8")
 
 	// check that the file was not modified
 	newLastModified, err := datastore.GetFileLastModified(s.ctx, "FFFFFFFF--0-9/FFFFFFF9--6.xdr."+compressxdr.DefaultCompressor.Name())
@@ -244,35 +311,48 @@ func (s *GalexieTestSuite) TestAppend() {
 func (s *GalexieTestSuite) TestAppendUnbounded() {
 	require := s.Require()
 
+	// Pre-populate ledgers 10-12 so FindLatestLedgerSequence has data to detect.
 	rootCmd := cmd.DefineCommands()
-	rootCmd.SetArgs([]string{"append", "--start", "10", "--config-file", s.tempConfigFile})
-	var errWriter bytes.Buffer
-	var outWriter bytes.Buffer
-	rootCmd.SetErr(&errWriter)
-	rootCmd.SetOut(&outWriter)
-
-	appendCtx, cancel := context.WithCancel(s.ctx)
-	syn := make(chan struct{})
-	defer func() { <-syn }()
-	defer cancel()
-	go func() {
-		defer close(syn)
-		require.NoError(rootCmd.ExecuteContext(appendCtx))
-		output := outWriter.String()
-		errOutput := errWriter.String()
-		s.T().Log(output)
-		s.T().Log(errOutput)
-	}()
+	rootCmd.SetArgs([]string{"scan-and-fill", "--start", "10", "--end", "12", "--config-file", s.tempConfigFile})
+	err := rootCmd.ExecuteContext(s.ctx)
+	require.NoError(err)
 
 	datastore, err := datastore.NewDataStore(s.ctx, s.config.DataStoreConfig)
 	require.NoError(err)
 
+	// Run unbounded append and capture log output.
+	// Should detect ledger 12 as the last and resume from 13.
+	var logBuf bytes.Buffer
+	galexie.SetLogOutput(&logBuf)
+	defer galexie.SetLogOutput(os.Stderr)
+
+	rootCmd = cmd.DefineCommands()
+	rootCmd.SetArgs([]string{"append", "--start", "10", "--config-file", s.tempConfigFile})
+
+	appendCtx, cancel := context.WithCancel(s.ctx)
+	var cmdErr error
+	syn := make(chan struct{})
+	go func() {
+		defer close(syn)
+		cmdErr = rootCmd.ExecuteContext(appendCtx)
+	}()
+
 	require.EventuallyWithT(func(c *assert.CollectT) {
-		// this checks every 50ms up to 180s total
-		assert := assert.New(c)
-		_, err = datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
-		assert.NoError(err)
+		_, getErr := datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
+		assert.NoError(c, getErr)
 	}, 180*time.Second, 50*time.Millisecond, "append unbounded did not work")
+
+	cancel()
+	<-syn
+	require.NoError(cmdErr)
+
+	logOutput := logBuf.String()
+	s.T().Log(logOutput)
+
+	require.Contains(logOutput, "will resume at later start ledger of 13",
+		"append should detect ledger 12 as last and resume from 13")
+	require.Contains(logOutput, "start=13, end=0",
+		"final computed range should start at 13")
 }
 
 func (s *GalexieTestSuite) TestAppendUnboundedSequenceNumber2() {
@@ -1027,8 +1107,29 @@ func (s *GalexieTestSuite) mustWaitForLocalStack(t *testing.T) {
 	t.Fatalf("LocalStack did not become ready within %v", maxWaitForLocalStackStartup)
 }
 
+// ensureBucket extracts the bucket name from a destination_bucket_path
+// and creates it on the storage backend.
+func (s *GalexieTestSuite) ensureBucket(t *testing.T, bucketPath string) {
+	t.Helper()
+	bucket := strings.TrimRight(bucketPath, "/")
+	if i := strings.Index(bucket, "/"); i >= 0 {
+		bucket = bucket[:i]
+	}
+	switch s.storageType {
+	case "GCS":
+		s.gcsServer.CreateBucket(bucket)
+	case "S3":
+		s.createLocalStackBucketByName(t, bucket)
+	default:
+		t.Fatalf("invalid storage type: %s", s.storageType)
+	}
+}
+
 func (s *GalexieTestSuite) createLocalStackBucket(t *testing.T) {
-	bucketName := "integration-test"
+	s.createLocalStackBucketByName(t, "integration-test")
+}
+
+func (s *GalexieTestSuite) createLocalStackBucketByName(t *testing.T, bucketName string) {
 	url := "http://localhost:4566/" + bucketName
 	req, err := http.NewRequestWithContext(s.ctx, "PUT", url, nil)
 	if err != nil {

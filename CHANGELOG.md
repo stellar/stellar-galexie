@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v25.1.1]
+
+### Bug Fixes
+- Upgraded `go-stellar-sdk` to fix `FindLatestLedgerSequence` incorrectly handling bucket paths that include a prefix (subdirectory), and added integration tests covering various bucket path configurations ([#64](https://github.com/stellar/stellar-galexie/pull/64))
+
 ## [v25.1.0]
 
 ### New Features
