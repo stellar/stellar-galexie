@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v26.0.0]
+
+### Updates
+- Bumped stellar-core version to v26.0.0 for Protocol 26 support ([#62](https://github.com/stellar/stellar-galexie/pull/62))
+
 ## [v25.1.1]
 
 ### Bug Fixes
