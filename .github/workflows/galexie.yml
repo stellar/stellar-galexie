@@ -5,7 +5,9 @@ on:
     branches:
       - main
       - 'release/**'
-    tags: ['galexie-v*']
+    tags:
+      - 'galexie-v[0-9]+.[0-9]+.[0-9]+'
+      - 'galexie-v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
   pull_request:
 
 jobs:
