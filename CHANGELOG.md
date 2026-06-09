@@ -10,6 +10,11 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 - Bumped `go-stellar-sdk` to pick up Protocol 27 (CAP-0071) XDR
 - Bumped `go-xdr` (transitive) to raise default XDR decode depth from 250 to 1500, required for CAP-0071 delegated Soroban credential chains
 
+## [v26.0.0]
+
+### Updates
+- Bumped stellar-core version to v26.0.0 for Protocol 26 support ([#62](https://github.com/stellar/stellar-galexie/pull/62))
+
 ## [v25.1.1]
 
 ### Bug Fixes
