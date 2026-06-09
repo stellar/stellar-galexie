@@ -22,7 +22,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.17.0
-	github.com/stellar/go-xdr v0.0.0-20260312225820-cc2b0611aabf // indirect
+	github.com/stellar/go-xdr v0.0.0-20260529210834-0bf8f4956364 // indirect
 	github.com/stretchr/testify v1.11.1
 	github.com/xdrpp/goxdr v0.1.1 // indirect
 	google.golang.org/api v0.183.0 // indirect
@@ -33,7 +33,7 @@ require (
 	github.com/docker/docker v28.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/fsouza/fake-gcs-server v1.49.2
-	github.com/stellar/go-stellar-sdk v0.3.1-0.20260323224849-cbd446204cd3
+	github.com/stellar/go-stellar-sdk v0.5.1-0.20260605220916-532e2b5144d4
 )
 
 require (
