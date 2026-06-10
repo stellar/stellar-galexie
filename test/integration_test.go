@@ -187,7 +187,7 @@ func (s *GalexieTestSuite) TestScanAndFill() {
 	datastore, err := datastore.NewDataStore(s.ctx, s.config.DataStoreConfig)
 	require.NoError(err)
 
-	_, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
+	_, _, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 
 	lastModified, err := datastore.GetFileLastModified(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
@@ -209,7 +209,7 @@ func (s *GalexieTestSuite) TestScanAndFill() {
 	require.NoError(err)
 	require.Equal(lastModified, newLastModified)
 
-	_, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
+	_, _, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 }
 
@@ -234,7 +234,7 @@ func (s *GalexieTestSuite) TestReplace() {
 	datastore, err := datastore.NewDataStore(s.ctx, s.config.DataStoreConfig)
 	require.NoError(err)
 
-	_, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
+	_, _, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 
 	lastModified, err := datastore.GetFileLastModified(s.ctx, "FFFFFFFF--0-9/FFFFFFFA--5.xdr."+compressxdr.DefaultCompressor.Name())
@@ -260,7 +260,7 @@ func (s *GalexieTestSuite) TestReplace() {
 	require.NoError(err)
 	require.NotEqual(lastModified, newLastModified)
 
-	_, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
+	_, _, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 }
 
@@ -304,7 +304,7 @@ func (s *GalexieTestSuite) TestAppend() {
 	require.NoError(err)
 	require.Equal(lastModified, newLastModified, "file should not be modified on append of overlapping range")
 
-	_, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
+	_, _, err = datastore.GetFile(s.ctx, "FFFFFFFF--0-9/FFFFFFF6--9.xdr."+compressxdr.DefaultCompressor.Name())
 	require.NoError(err)
 }
 
@@ -338,7 +338,7 @@ func (s *GalexieTestSuite) TestAppendUnbounded() {
 	}()
 
 	require.EventuallyWithT(func(c *assert.CollectT) {
-		_, getErr := datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
+		_, _, getErr := datastore.GetFile(s.ctx, "FFFFFFF5--10-19/FFFFFFF0--15.xdr."+compressxdr.DefaultCompressor.Name())
 		assert.NoError(c, getErr)
 	}, 180*time.Second, 50*time.Millisecond, "append unbounded did not work")
 
@@ -378,7 +378,7 @@ func (s *GalexieTestSuite) TestAppendUnboundedSequenceNumber2() {
 
 	require.Eventually(
 		func() bool {
-			_, err := datastore.GetFile(
+			_, _, err := datastore.GetFile(
 				ctx,
 				"FFFFFFFF--0-9/FFFFFFFD--2.xdr."+compressxdr.DefaultCompressor.Name(),
 			)
