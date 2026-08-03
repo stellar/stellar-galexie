@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v28.0.0]
+
+### Updates
+- Bumped stellar-core to 28.0.0 (`28.0.0-3486.2332980a1.noble`, both `CAPTIVE_CORE_DEBIAN_PKG_VERSION` and `STELLAR_CORE_VERSION`) for Protocol 28 support
+- Bumped `go-stellar-sdk` to pick up Protocol 28 (CAP-0083, CAP-0085) XDR; adapted the load-test backend to the SDK's multi-bundle `LedgersFilePaths` API ([go-stellar-sdk#5959](https://github.com/stellar/go-stellar-sdk/pull/5959))
+
 ## [v27.0.0]
 
 ### Updates

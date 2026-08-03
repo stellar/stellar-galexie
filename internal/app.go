@@ -486,7 +486,7 @@ func newLoadTestBackend(config *Config, backend ledgerbackend.LedgerBackend) *lo
 	return loadtest.NewLedgerBackend(loadtest.LedgerBackendConfig{
 		NetworkPassphrase:   config.StellarCoreConfig.NetworkPassphrase,
 		LedgerBackend:       backend,
-		LedgersFilePath:     config.LoadTestLedgersPath,
+		LedgersFilePaths:    []string{config.LoadTestLedgersPath},
 		LedgerCloseDuration: config.LoadTestCloseDuration,
 	})
 }
