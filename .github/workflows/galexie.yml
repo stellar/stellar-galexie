@@ -18,7 +18,7 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
-      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 28.0.0-3486.2332980a1.noble
+      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 28.0.0-3494.a9b861321.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
       # Immutable build tag of quickstart:future (identical digest as of 2026-08-03).
@@ -59,7 +59,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # this is the version of core to be bundled with galaxie on image
-      STELLAR_CORE_VERSION: 28.0.0-3486.2332980a1.noble
+      STELLAR_CORE_VERSION: 28.0.0-3494.a9b861321.noble
     steps:
       - uses: actions/checkout@v5
       - name: Login to DockerHub
