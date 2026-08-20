@@ -21,13 +21,10 @@ jobs:
       CAPTIVE_CORE_DEBIAN_PKG_VERSION: 28.0.0-3494.a9b861321.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
-      # Immutable build tag of quickstart:future (identical digest as of 2026-08-03).
-      # Its bundled core (27.1.0-68-gc1075639) is a direct ancestor of the GA 28.0.0
-      # core, so it can run a protocol-28 network for the captive core to join.
-      # TODO: move to the stable-track quickstart once it bundles core 28.0.0 GA
-      # (quickstart auto-update follows the apt *stable* track, which core 28 has
-      # not been promoted to yet).
-      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v649-b1276.1-future
+      # Immutable build tag of the stable-track quickstart (:latest). Its bundled core
+      # is the GA 28.0.0 (ledger protocol 28, base XDR 9c9c1459) that apt stable now
+      # carries, matching CAPTIVE_CORE_DEBIAN_PKG_VERSION above on the same major rev.
+      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v657-b1330.1-latest
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE_PULL: "false"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_TAG: "4.6.0"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_PULL: "false"
