@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v28.0.1]
+
+### Updates
+- Bumped bundled stellar-core to 28.0.1 (`28.0.1-3508.947aad841`).
+
 ## [v28.0.0]
 
 ### Updates
