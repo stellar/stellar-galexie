@@ -18,12 +18,14 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
-      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 28.0.0-3494.a9b861321.noble
+      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 28.0.1-3508.947aad841.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
-      # Immutable build tag of the stable-track quickstart (:latest). Its bundled core
-      # is the GA 28.0.0 (ledger protocol 28, base XDR 9c9c1459) that apt stable now
-      # carries, matching CAPTIVE_CORE_DEBIAN_PKG_VERSION above on the same major rev.
+      # Immutable build tag of the stable-track quickstart (:latest). This image only
+      # runs the standalone network that the captive core above joins, so its core does
+      # not have to be the same build. Quickstart compiles core from a stellar-core git
+      # tag (currently v28.0.0), so it stays on 28.0.0 until a v28.0.1 tag is published;
+      # it starts a protocol 28 network either way, which is what these tests need.
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v657-b1330.1-latest
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE_PULL: "false"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_TAG: "4.6.0"
@@ -56,7 +58,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # this is the version of core to be bundled with galaxie on image
-      STELLAR_CORE_VERSION: 28.0.0-3494.a9b861321.noble
+      STELLAR_CORE_VERSION: 28.0.1-3508.947aad841.noble
     steps:
       - uses: actions/checkout@v5
       - name: Login to DockerHub
