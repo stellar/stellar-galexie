@@ -398,13 +398,16 @@ func (a *App) runDetectGaps(ctx context.Context, reportWriter io.Writer) error {
 		return fmt.Errorf("invalid range: from (%d) must be <= to (%d)", from, to)
 	}
 
-	sc, _ := scan.NewScanner(
+	sc, err := scan.NewScanner(
 		a.dataStore,
 		a.config.DataStoreConfig.Schema,
 		defaultNumWorkers,
 		defaultTaskSize,
 		logger,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to create scanner: %w", err)
+	}
 
 	start := time.Now()
 	rep, err := sc.Run(ctx, from, to)
