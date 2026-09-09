@@ -137,6 +137,24 @@ func TestApplyResumeWithNoRemoteDataAndRequestFromGenesis(t *testing.T) {
 	require.Equal(t, app.config.StartLedger, uint32(2))
 }
 
+func TestRunDetectGapsReturnsScannerConfigurationError(t *testing.T) {
+	app := &App{
+		config: &Config{
+			StartLedger: 2,
+			EndLedger:   1000,
+			DataStoreConfig: datastore.DataStoreConfig{
+				Schema: datastore.DataStoreSchema{
+					LedgersPerFile:    0,
+					FilesPerPartition: 64000,
+				},
+			},
+		},
+	}
+
+	err := app.runDetectGaps(context.Background(), nil)
+	require.EqualError(t, err, "failed to create scanner: invalid LedgersPerFile (0): must be greater than zero")
+}
+
 func TestValidateExistingFileExtension(t *testing.T) {
 	var someOtherError = errors.New("a different error")
 
