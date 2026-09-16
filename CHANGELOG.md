@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v29.0.0]
+
+### Updates
+- Bumped stellar-core version to v29.0.0 for Protocol 29 support.
+
 ## [v28.0.1]
 
 ### Updates
