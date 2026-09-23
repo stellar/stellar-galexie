@@ -6,7 +6,7 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 ## [v29.0.0]
 
 ### Updates
-- Bumped stellar-core version to v29.0.0 for Protocol 29 support.
+- Bumped stellar-core version to v29.0.0 for Protocol 29 support ([#96](https://github.com/stellar/stellar-galexie/pull/96)).
 
 ## [v28.0.1]
 
