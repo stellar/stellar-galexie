@@ -16,8 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// fpath builds an object key the way the datastore schema does: the prefix is
+// the inverted hex of the low ledger so that older ranges sort later.
 func fpath(low, high uint32) string {
-	return fmt.Sprintf("00000000--%d-%d.xdr.zst", low, high)
+	return fmt.Sprintf("%08X--%d-%d.xdr.zst", math.MaxUint32-low, low, high)
 }
 
 func TestNewScanner_NormalizesTaskSize(t *testing.T) {
