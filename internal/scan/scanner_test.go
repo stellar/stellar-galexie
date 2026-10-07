@@ -116,7 +116,7 @@ func newMockScanner(t *testing.T, numWorkers, taskSize uint32) *Scanner {
 
 	ds := new(datastore.MockDataStore)
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
-		Return([]string{"00000000--1.xdr.zst"}, nil).Once()
+		Return([]string{"FFFFFFFE--1.xdr.zst"}, nil).Once()
 
 	schema := datastore.DataStoreSchema{LedgersPerFile: 1}
 	sc, err := NewScanner(ds, schema, numWorkers, taskSize, log.DefaultLogger)
