@@ -18,6 +18,11 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
+      # TODO: no stellar-core 30.x deb or protocol 30 quickstart is published yet, so
+      # these tests never export a protocol 30 (CAP-0088) ledger. Once both exist, set
+      # this and STELLAR_CORE_VERSION in publish-sha-tag-image to the same 30.x deb, and
+      # move GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE to a build tag that starts a
+      # protocol 30 network.
       CAPTIVE_CORE_DEBIAN_PKG_VERSION: 29.0.0-3589.4eb833373.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
