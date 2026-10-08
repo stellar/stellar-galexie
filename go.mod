@@ -121,7 +121,6 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.17.0 // indirect
-	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
@@ -157,4 +156,4 @@ require (
 // Protocol 30: build against stellar/go-stellar-sdk#6015 (CAP-0084, CAP-0087,
 // CAP-0088) until it merges. Then drop this replace and require the merged
 // upstream commit or SDK release.
-replace github.com/stellar/go-stellar-sdk => github.com/sisuresh/go v0.0.0-20261008094525-174b61f009bc
+replace github.com/stellar/go-stellar-sdk => github.com/sisuresh/go v0.0.0-20261008104555-663a89a12043
