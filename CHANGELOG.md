@@ -6,7 +6,7 @@ file. This project adheres to [Semantic Versioning](http://semver.org/).
 ## [v30.0.0]
 
 ### Updates
-- Bumped `go-stellar-sdk` to pick up Protocol 30 (CAP-0084, CAP-0087, CAP-0088) XDR ([stellar/go-stellar-sdk#6015](https://github.com/stellar/go-stellar-sdk/pull/6015)). Every ledger closed after the Protocol 30 upgrade carries a CAP-0088 millisecond close-time `StellarValue`, which earlier SDKs cannot decode. The `start-ledger-close-time` and `end-ledger-close-time` object metadata stay in whole seconds.
+- Bumped `go-stellar-sdk` to pick up Protocol 30 (CAP-0084, CAP-0087, CAP-0088) XDR ([#98](https://github.com/stellar/stellar-galexie/pull/98), [stellar/go-stellar-sdk#6015](https://github.com/stellar/go-stellar-sdk/pull/6015)). Every ledger closed after the Protocol 30 upgrade carries a CAP-0088 millisecond close-time `StellarValue`, which earlier SDKs cannot decode. The `start-ledger-close-time` and `end-ledger-close-time` object metadata stay in whole seconds.
 
 ## [v29.0.0]
 
