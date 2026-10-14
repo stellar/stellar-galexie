@@ -33,7 +33,7 @@ require (
 	github.com/docker/docker v28.0.0+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/fsouza/fake-gcs-server v1.49.2
-	github.com/stellar/go-stellar-sdk v0.7.2
+	github.com/stellar/go-stellar-sdk v0.7.4-0.20261014050248-990270d32ebe
 )
 
 require (
@@ -152,8 +152,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
-
-// Protocol 30: build against stellar/go-stellar-sdk#6015 (CAP-0084, CAP-0087,
-// CAP-0088) until it merges. Then drop this replace and require the merged
-// upstream commit or SDK release.
-replace github.com/stellar/go-stellar-sdk => github.com/sisuresh/go v0.0.0-20261008104555-663a89a12043
