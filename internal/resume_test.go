@@ -91,7 +91,7 @@ func TestResumability(t *testing.T) {
 			registerMockCalls: func(mockDataStore *datastore.MockDataStore) {
 				mockDataStore.On("ListFilePaths", ctx, datastore.ListFileOptions{
 					StartAfter: "FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}).
-					Return([]string{"FFFFFFFF--0-6399/FFFFFF7F--128-191.xdr.zst"}, nil).Once()
+					Return([]string{"FFFFFFFF--0-6399/FFFFFFBF--64-127.xdr.zst"}, nil).Once()
 			},
 		},
 		{

@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stellar/go-stellar-sdk/support/datastore"
@@ -81,7 +82,7 @@ func TestScanTaskAdvanced(t *testing.T) {
 	}{
 		{
 			name: "Top+Internal+Bottom gaps",
-			lpf:  64,
+			lpf:  1,
 			part: task{low: 5, high: 100},
 			batches: [][]string{
 				{fpath(95, 98)}, // page 1
@@ -120,8 +121,28 @@ func TestScanTaskAdvanced(t *testing.T) {
 			},
 		},
 		{
-			name: "Multiple files in one page",
+			// Keys come from the schema itself, so file boundaries, the start
+			// cursor, and the stop key all match a real 64-ledger lake.
+			name: "Aligned 64-ledger files with a missing middle file",
 			lpf:  64,
+			part: task{low: 2, high: 191},
+			batches: [][]string{
+				{schemaKey(64, 128)}, // file 128-191: top covered
+				{schemaKey(64, 0)},   // file 0-63: file 64-127 missing in between
+				{},
+			},
+			want: result{
+				high:  191,
+				low:   2, // clamped from 0
+				count: 64 + 62,
+				gaps: []Gap{
+					{Start: 64, End: 127},
+				},
+			},
+		},
+		{
+			name: "Multiple files in one page",
+			lpf:  1,
 			part: task{low: 2, high: 100},
 			batches: [][]string{
 				{spath(100), fpath(90, 95)}, // page 1: top covered; internal Gap [96,99]
@@ -172,7 +193,7 @@ func TestScanTask_InvalidRange_Error(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string{}, nil).Maybe()
 
-	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
+	schema := datastore.DataStoreSchema{LedgersPerFile: 1}
 	part := task{low: 1, high: 100}
 
 	_, err := scanTask(ctx, part, ds, schema)
@@ -190,7 +211,7 @@ func TestScanTask_DatastoreError_BubblesUp(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string(nil), assert.AnError).Once()
 
-	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
+	schema := datastore.DataStoreSchema{LedgersPerFile: 1}
 	part := task{low: 1, high: 100}
 
 	_, err := scanTask(ctx, part, ds, schema)
@@ -210,7 +231,7 @@ func TestScanTask_ContextCanceledMidIteration(t *testing.T) {
 	ds.On("ListFilePaths", mock.Anything, mock.Anything).
 		Return([]string(nil), context.Canceled).Once()
 
-	schema := datastore.DataStoreSchema{LedgersPerFile: 64}
+	schema := datastore.DataStoreSchema{LedgersPerFile: 1}
 	part := task{low: 1, high: 100}
 
 	_, err := scanTask(ctx, part, ds, schema)
@@ -221,5 +242,10 @@ func TestScanTask_ContextCanceledMidIteration(t *testing.T) {
 }
 
 func spath(n uint32) string {
-	return fmt.Sprintf("00000000--%d.xdr.zst", n)
+	return fmt.Sprintf("%08X--%d.xdr.zst", math.MaxUint32-n, n)
+}
+
+// schemaKey returns the real object key for the file holding ledger seq.
+func schemaKey(lpf, seq uint32) string {
+	return datastore.DataStoreSchema{LedgersPerFile: lpf}.GetObjectKeyFromSequenceNumber(seq)
 }
