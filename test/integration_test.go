@@ -958,12 +958,18 @@ func (s *GalexieTestSuite) mustStartCore(t *testing.T, quickstartImage string, p
 		}
 	}
 
+	// only run tge core service(no horizon, rpc, etc) and don't spend any time upgrading
+	// the core with newer soroban limits
+	cmd := []string{"--enable", "core,,", "--limits", "default", "--local"}
+	// Upgrade the network to this protocol instead of the image's default.
+	if protocolVersion := os.Getenv("GALEXIE_INTEGRATION_TESTS_QUICKSTART_PROTOCOL_VERSION"); protocolVersion != "" {
+		cmd = append(cmd, "--protocol-version", protocolVersion)
+	}
+
 	resp, err := s.dockerCli.ContainerCreate(s.ctx,
 		&container.Config{
 			Image: quickstartImage,
-			// only run tge core service(no horizon, rpc, etc) and don't spend any time upgrading
-			// the core with newer soroban limits
-			Cmd: []string{"--enable", "core,,", "--limits", "default", "--local"},
+			Cmd:   cmd,
 			ExposedPorts: nat.PortSet{
 				nat.Port("1570/tcp"):  {},
 				nat.Port("11625/tcp"): {},
