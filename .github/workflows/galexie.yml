@@ -18,18 +18,12 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
-      # The stellar-core 30.0.0 release candidate (0e49751aa). Keep this and
-      # STELLAR_CORE_VERSION in publish-sha-tag-image on the same package, and move
-      # both to the final 30.0.0 package before release.
+      # 30.0.0 release candidate. Move this and STELLAR_CORE_VERSION to 30.0.0 before release.
       CAPTIVE_CORE_DEBIAN_PKG_VERSION: 30.0.0-3642.0e49751aa.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
-      # Immutable build tag of the nightly quickstart, whose core is stellar-core
-      # master (66defff52). No quickstart release runs protocol 30 yet. It only runs
-      # the standalone network the captive core above joins, so its core does not
-      # have to match. The network is upgraded to protocol 30, so every ledger after
-      # the upgrade uses the CAP-0088 millisecond close-time StellarValue arm. Move
-      # to a :testing or :latest build tag once one can run protocol 30.
+      # Immutable build tag of the nightly quickstart, which can run protocol 30. It only runs
+      # the standalone network the captive core above joins, so its core does not have to match.
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v678-b1528.1-nightly
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE_PULL: "false"
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_PROTOCOL_VERSION: "30"
