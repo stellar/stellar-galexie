@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v30.0.0]
+
+### Updates
+- Added Protocol 30 support ([#98](https://github.com/stellar/stellar-galexie/pull/98)).
+
 ## [v29.0.0]
 
 ### Updates

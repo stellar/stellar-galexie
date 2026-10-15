@@ -18,14 +18,15 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
-      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 29.0.0-3589.4eb833373.noble
+      # 30.0.0 release candidate. Move this and STELLAR_CORE_VERSION to 30.0.0 before release.
+      CAPTIVE_CORE_DEBIAN_PKG_VERSION: 30.0.0-3642.0e49751aa.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
-      # Immutable build tag of the stable-track quickstart (:latest). It only runs the
-      # standalone network the captive core above joins, so its core does not have to
-      # match. No P29 quickstart exists yet; the network it starts is protocol 28.
-      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v657-b1330.1-latest
+      # Immutable build tag of the nightly quickstart, which can run protocol 30. It only runs
+      # the standalone network the captive core above joins, so its core does not have to match.
+      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v678-b1528.1-nightly
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE_PULL: "false"
+      GALEXIE_INTEGRATION_TESTS_QUICKSTART_PROTOCOL_VERSION: "30"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_TAG: "4.6.0"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_PULL: "false"
     steps:
@@ -56,7 +57,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # this is the version of core to be bundled with galaxie on image
-      STELLAR_CORE_VERSION: 29.0.0-3589.4eb833373.noble
+      STELLAR_CORE_VERSION: 30.0.0-3642.0e49751aa.noble
     steps:
       - uses: actions/checkout@v5
       - name: Login to DockerHub
