@@ -18,7 +18,6 @@ jobs:
       matrix:
         storage_type: [ GCS, S3, Filesystem ]
     env:
-      # 30.0.0 release candidate. Move this and STELLAR_CORE_VERSION to 30.0.0 before release.
       CAPTIVE_CORE_DEBIAN_PKG_VERSION: 30.0.0-3642.0e49751aa.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
