@@ -60,8 +60,8 @@ func TestApplyResumeInvalidDataStoreLedgersPerFileBoundary(t *testing.T) {
 
 	// simulate the datastore has inconsistent data,
 	// with last ledger not aligned to starting boundary
-	mockds.On("ListFilePaths", ctx, mock.Anything).Return([]string{"FFFFFFF9--6.xdr.zst"}, nil).Once()
-	mockds.On("GetFileMetadata", ctx, "FFFFFFF9--6.xdr.zst").
+	mockds.On("ListFilePaths", ctx, mock.Anything).Return([]string{"FFFFFFFF--0-499/FFFFFFF9--6.xdr.zst"}, nil).Once()
+	mockds.On("GetFileMetadata", ctx, "FFFFFFFF--0-499/FFFFFFF9--6.xdr.zst").
 		Return(map[string]string{"end-ledger": "6"}, nil).Once()
 
 	var invalidStore *InvalidDataStoreError
@@ -84,8 +84,8 @@ func TestApplyResumeWithPartialRemoteDataPresent(t *testing.T) {
 	app.dataStore = mockds
 
 	// simulates a data store that had ledger files populated up to seq=49, so the first absent ledger would be 50
-	mockds.On("ListFilePaths", ctx, mock.Anything).Return([]string{"FFFFFFD7--40-49.xdr.zst"}, nil).Once()
-	mockds.On("GetFileMetadata", ctx, "FFFFFFD7--40-49.xdr.zst").
+	mockds.On("ListFilePaths", ctx, mock.Anything).Return([]string{"FFFFFFFF--0-499/FFFFFFD7--40-49.xdr.zst"}, nil).Once()
+	mockds.On("GetFileMetadata", ctx, "FFFFFFFF--0-499/FFFFFFD7--40-49.xdr.zst").
 		Return(map[string]string{"end-ledger": "49"}, nil).Once()
 
 	err := app.applyResumability(ctx)
