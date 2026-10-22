@@ -21,9 +21,9 @@ jobs:
       CAPTIVE_CORE_DEBIAN_PKG_VERSION: 30.0.0-3642.0e49751aa.noble
       GALEXIE_INTEGRATION_TESTS_ENABLED: "true"
       GALEXIE_INTEGRATION_TESTS_CAPTIVE_CORE_BIN: /usr/bin/stellar-core
-      # Immutable build tag of the nightly quickstart, which can run protocol 30. It only runs
-      # the standalone network the captive core above joins, so its core does not have to match.
-      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v678-b1528.1-nightly
+      # Immutable build tag of quickstart's latest track (core v30.0.0). It only runs the
+      # standalone network the captive core above joins, so its core does not have to match.
+      GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE: stellar/quickstart:v682-b1552.1-latest
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_IMAGE_PULL: "false"
       GALEXIE_INTEGRATION_TESTS_QUICKSTART_PROTOCOL_VERSION: "30"
       GALEXIE_INTEGRATION_TESTS_LOCALSTACK_IMAGE_TAG: "4.6.0"
