@@ -9,6 +9,11 @@ on:
       - 'galexie-v[0-9]+.[0-9]+.[0-9]+'
       - 'galexie-v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+'
   pull_request:
+  workflow_dispatch:
+
+env:
+  # this is the version of core to be bundled with galaxie on image
+  STELLAR_CORE_VERSION: 30.0.0-3642.0e49751aa.noble
 
 jobs:
   integration-test:
@@ -52,11 +57,8 @@ jobs:
   publish-sha-tag-image:
     name: Push sha tag container image
     needs: integration-test
-    if: ${{ github.event_name != 'pull_request' && github.ref_type != 'tag' }}
+    if: ${{ github.repository == 'stellar/stellar-galexie' && github.event_name == 'push' && github.ref_type != 'tag' }}
     runs-on: ubuntu-24.04
-    env:
-      # this is the version of core to be bundled with galaxie on image
-      STELLAR_CORE_VERSION: 30.0.0-3642.0e49751aa.noble
     steps:
       - uses: actions/checkout@v5
       - name: Login to DockerHub
@@ -72,7 +74,16 @@ jobs:
   publish-release-tag-image:
     name: Push release tag container image
     needs: integration-test
-    if: github.ref_type == 'tag'
+    # This repo publishes a release when its tag is pushed. A private clone publishes
+    # one only when this workflow is run by hand on the tag, so tags synced into it
+    # publish nothing.
+    if: >-
+      startsWith(github.ref, 'refs/tags/galexie-v') && (
+        (github.repository == 'stellar/stellar-galexie' && github.event_name == 'push') ||
+        (github.repository != 'stellar/stellar-galexie' && github.event_name == 'workflow_dispatch'))
+    # A private clone keeps its Docker Hub secrets in this environment, limited to
+    # galexie-v* tags, so older versions of this workflow cannot publish from it.
+    environment: release
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -84,12 +95,26 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Check whether the release is already published
+        id: published
+        # A release made in a private clone keeps its image when its tag reaches this repo.
+        run: |
+          if docker manifest inspect "stellar/stellar-galexie:${RELEASE_VERSION}" > /dev/null 2>&1; then
+            echo "::notice::stellar/stellar-galexie:${RELEASE_VERSION} is already published, so this run pushes nothing."
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Pull git sha tag image
+        if: steps.published.outputs.done != 'true' && github.repository == 'stellar/stellar-galexie'
         run: make docker-pull
+      - name: Build docker
+        # Private clones push no sha tag images, so they build the image from the tag.
+        if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
+        run: make docker-build
       - name: Push release tag image
+        if: steps.published.outputs.done != 'true'
         run: make docker-push-release
       - name: Push latest tag to DockerHub
-        if: ${{ ! contains(github.ref, '-rc') }}
+        if: steps.published.outputs.done != 'true' && !contains(github.ref, '-rc')
         run: make docker-push-latest
   
   complete:

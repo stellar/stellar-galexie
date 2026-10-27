@@ -15,7 +15,7 @@ Galexie uses [Semantic Versioning](https://semver.org/) and is released as:
 
 ## How releases are wired up
 
-Two jobs in `.github/workflows/galexie.yml` do the publishing:
+Two jobs in `.github/workflows/galexie.yml` do the publishing in `stellar/stellar-galexie`:
 
 - `publish-sha-tag-image` — runs on every push to `main` or `release/**`. Builds and pushes
   `stellar/stellar-galexie:<short-sha>`.
@@ -23,6 +23,22 @@ Two jobs in `.github/workflows/galexie.yml` do the publishing:
   from that commit, re-tags it as `stellar/stellar-galexie:X.Y.Z`, and pushes `:latest` for
   non-rc tags. **`publish-sha-tag-image` must have succeeded on the target commit first**,
   since this job pulls rather than rebuilds.
+
+A private clone of this repo pushes no sha tag images and publishes nothing when a tag is
+pushed. To release from one, push the `galexie-vX.Y.Z` tag there and run the Galexie workflow
+on that tag by hand (`gh workflow run galexie.yml --repo <clone> --ref galexie-vX.Y.Z`).
+`publish-release-tag-image` then builds the image from the tagged commit and pushes
+`stellar/stellar-galexie:X.Y.Z`, plus `:latest` for non-rc tags.
+
+The clone keeps `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` in an environment named `release`
+whose deployment rule allows only `galexie-v*` tags, never as repository secrets. Older
+versions of this workflow publish from pushes to `main`, `release/**` and release tags without
+that environment, so in the clone they cannot reach the secrets. A release branch cut before
+this change needs it cherry-picked before it can be released from a clone.
+
+`publish-release-tag-image` pushes nothing for a version that is already on Docker Hub. So when
+the tag of a release made in a clone is later pushed here, the image released from the clone
+stays.
 
 ---
 
