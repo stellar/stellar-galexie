@@ -5,7 +5,10 @@ WORKDIR /go-galexie
 COPY go.mod ./
 COPY go.sum ./
 
-RUN go mod download
+# The internal repo's release build mounts a git config that fetches unreleased
+# Go SDK versions from the SDK's internal repo (see internal-go-modules.sh).
+ARG GONOSUMDB
+RUN --mount=type=secret,id=go-modules-gitconfig,target=/etc/gitconfig go mod download
 
 COPY . ./
 

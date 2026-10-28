@@ -24,11 +24,11 @@ Two jobs in `.github/workflows/galexie.yml` do the publishing in `stellar/stella
   non-rc tags. **`publish-sha-tag-image` must have succeeded on the target commit first**,
   since this job pulls rather than rebuilds.
 
-The internal repo pushes no sha tag images and publishes nothing when a tag is
-pushed. To release from it, push the `galexie-vX.Y.Z` tag there and run the Galexie workflow
-on that tag by hand (`gh workflow run galexie.yml --repo stellar/stellar-galexie-internal --ref galexie-vX.Y.Z`).
-`publish-release-tag-image` then builds the image from the tagged commit and pushes
-`stellar/stellar-galexie:X.Y.Z`, plus `:latest` for non-rc tags.
+The internal repo, stellar/stellar-galexie-internal, pushes no sha tag images. To release from
+it, push the `galexie-vX.Y.Z` tag there. `publish-release-tag-image` then builds the image from
+the tagged commit and pushes `stellar/stellar-galexie:X.Y.Z`, plus `:latest` for non-rc tags.
+It skips tags that this repo already has, because those are synced from here and this repo
+publishes them.
 
 The internal repo keeps `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` in an environment named `release`
 whose deployment rule allows only `galexie-v*` tags, never as repository secrets. Older
