@@ -74,14 +74,14 @@ jobs:
   publish-release-tag-image:
     name: Push release tag container image
     needs: integration-test
-    # This repo publishes a release when its tag is pushed. A private clone publishes
+    # This repo publishes a release when its tag is pushed. The internal repo publishes
     # one only when this workflow is run by hand on the tag, so tags synced into it
     # publish nothing.
     if: >-
       startsWith(github.ref, 'refs/tags/galexie-v') && (
         (github.repository == 'stellar/stellar-galexie' && github.event_name == 'push') ||
         (github.repository != 'stellar/stellar-galexie' && github.event_name == 'workflow_dispatch'))
-    # A private clone keeps its Docker Hub secrets in this environment, limited to
+    # The internal repo keeps its Docker Hub secrets in this environment, limited to
     # galexie-v* tags, so older versions of this workflow cannot publish from it.
     environment: release
     runs-on: ubuntu-24.04
@@ -97,7 +97,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Check whether the release is already published
         id: published
-        # A release made in a private clone keeps its image when its tag reaches this repo.
+        # A release made in the internal repo keeps its image when its tag reaches this repo.
         run: |
           if docker manifest inspect "stellar/stellar-galexie:${RELEASE_VERSION}" > /dev/null 2>&1; then
             echo "::notice::stellar/stellar-galexie:${RELEASE_VERSION} is already published, so this run pushes nothing."
@@ -107,7 +107,7 @@ jobs:
         if: steps.published.outputs.done != 'true' && github.repository == 'stellar/stellar-galexie'
         run: make docker-pull
       - name: Build docker
-        # Private clones push no sha tag images, so they build the image from the tag.
+        # The internal repo pushes no sha tag images, so it builds the image from the tag.
         if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
         run: make docker-build
       - name: Push release tag image
