@@ -51,6 +51,10 @@ jobs:
         with:
           # For pull requests, build and test the PR head not a merge of the PR with the destination.
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - uses: ./.github/actions/internal-go-modules
+        with:
+          app-id: ${{ vars.INTERNAL_GO_MODULES_APP_ID }}
+          private-key: ${{ secrets.INTERNAL_GO_MODULES_APP_PRIVATE_KEY }}
       - name: Run tests - ${{ matrix.storage_type }} integration
         run: go test -v -race -run "TestGalexie${{ matrix.storage_type }}TestSuite" ./test/...
 
@@ -74,14 +78,8 @@ jobs:
   publish-release-tag-image:
     name: Push release tag container image
     needs: integration-test
-    # This repo publishes a release when its tag is pushed. A private clone publishes
-    # one only when this workflow is run by hand on the tag, so tags synced into it
-    # publish nothing.
-    if: >-
-      startsWith(github.ref, 'refs/tags/galexie-v') && (
-        (github.repository == 'stellar/stellar-galexie' && github.event_name == 'push') ||
-        (github.repository != 'stellar/stellar-galexie' && github.event_name == 'workflow_dispatch'))
-    # A private clone keeps its Docker Hub secrets in this environment, limited to
+    if: startsWith(github.ref, 'refs/tags/galexie-v')
+    # The internal repo keeps its Docker Hub secrets in this environment, limited to
     # galexie-v* tags, so older versions of this workflow cannot publish from it.
     environment: release
     runs-on: ubuntu-24.04
@@ -97,19 +95,31 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Check whether the release is already published
         id: published
-        # A release made in a private clone keeps its image when its tag reaches this repo.
+        # The internal repo skips the tags it syncs from this repo, which publishes them itself.
+        # A release made in the internal repo keeps its image when its tag reaches this repo.
         run: |
-          if docker manifest inspect "stellar/stellar-galexie:${RELEASE_VERSION}" > /dev/null 2>&1; then
+          if [ "$GITHUB_REPOSITORY" != stellar/stellar-galexie ] &&
+            git ls-remote --exit-code --tags https://github.com/stellar/stellar-galexie "refs/tags/${GITHUB_REF_NAME}" > /dev/null; then
+            echo "::notice::stellar/stellar-galexie has ${GITHUB_REF_NAME} and publishes it, so this run pushes nothing."
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          elif docker manifest inspect "stellar/stellar-galexie:${RELEASE_VERSION}" > /dev/null 2>&1; then
             echo "::notice::stellar/stellar-galexie:${RELEASE_VERSION} is already published, so this run pushes nothing."
             echo "done=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Pull git sha tag image
         if: steps.published.outputs.done != 'true' && github.repository == 'stellar/stellar-galexie'
         run: make docker-pull
-      - name: Build docker
-        # Private clones push no sha tag images, so they build the image from the tag.
+      - name: Fetch the Go SDK from its internal repo
+        id: internal-go-modules
         if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
-        run: make docker-build
+        uses: ./.github/actions/internal-go-modules
+        with:
+          app-id: ${{ vars.INTERNAL_GO_MODULES_APP_ID }}
+          private-key: ${{ secrets.INTERNAL_GO_MODULES_APP_PRIVATE_KEY }}
+      - name: Build docker
+        # The internal repo pushes no sha tag images, so it builds the image from the tag.
+        if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
+        run: make docker-build GO_MODULES_GITCONFIG=${{ steps.internal-go-modules.outputs.gitconfig }}
       - name: Push release tag image
         if: steps.published.outputs.done != 'true'
         run: make docker-push-release
