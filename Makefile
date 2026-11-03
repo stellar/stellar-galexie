@@ -5,11 +5,14 @@ BUILD_DATE := $(shell date -u +%FT%TZ)
 VERSION ?= $(shell git rev-parse --short HEAD)
 RELEASE_VERSION ?= $(shell git describe --exact-match --tags)
 DOCKER_IMAGE := stellar/stellar-galexie
+# The internal repo's release build passes the git config from internal-go-modules.sh.
+GO_MODULES_BUILD_ARGS = --secret id=go-modules-gitconfig,src=$(GO_MODULES_GITCONFIG) --build-arg GONOSUMDB=github.com/stellar/go-stellar-sdk
 
 docker-build:
 	$(SUDO) docker build --platform linux/amd64 --pull --label org.opencontainers.image.created="$(BUILD_DATE)" \
     --build-arg GOFLAGS="-ldflags=-X=github.com/stellar/stellar-galexie/internal.version=$(VERSION)" \
 $(if $(STELLAR_CORE_VERSION), --build-arg STELLAR_CORE_VERSION=$(STELLAR_CORE_VERSION)) \
+$(if $(GO_MODULES_GITCONFIG), $(GO_MODULES_BUILD_ARGS)) \
 	-f docker/Dockerfile \
 	-t $(DOCKER_IMAGE):$(VERSION) .
 
