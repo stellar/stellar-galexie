@@ -53,8 +53,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - uses: ./.github/actions/internal-go-modules
         with:
-          app-id: ${{ vars.INTERNAL_GO_MODULES_APP_ID }}
-          private-key: ${{ secrets.INTERNAL_GO_MODULES_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.INTERNAL_GO_MODULES_GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.INTERNAL_GO_MODULES_GH_APP_PRIVATE_KEY }}
       - name: Run tests - ${{ matrix.storage_type }} integration
         run: go test -v -race -run "TestGalexie${{ matrix.storage_type }}TestSuite" ./test/...
 
@@ -114,8 +114,8 @@ jobs:
         if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
         uses: ./.github/actions/internal-go-modules
         with:
-          app-id: ${{ vars.INTERNAL_GO_MODULES_APP_ID }}
-          private-key: ${{ secrets.INTERNAL_GO_MODULES_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.INTERNAL_GO_MODULES_GH_APP_CLIENT_ID }}
+          private-key: ${{ secrets.INTERNAL_GO_MODULES_GH_APP_PRIVATE_KEY }}
       - name: Build docker
         # The internal repo pushes no sha tag images, so it builds the image from the tag.
         if: steps.published.outputs.done != 'true' && github.repository != 'stellar/stellar-galexie'
