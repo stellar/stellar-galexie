@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this
 file. This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [v30.0.1]
+
+### Updates
+- Bumped go-stellar-sdk to v0.9.0. Captive core now reads a ledger's meta whatever its size; a ledger whose meta was larger than 256 MiB stopped the export. Galexie now checks the datastore schema at startup and rejects a `ledgers_per_file` or `files_per_partition` of 0, or a pair whose product doesn't fit in 32 bits.
+
 ## [v30.0.0]
 
 ### Updates
