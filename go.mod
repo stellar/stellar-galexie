@@ -2,6 +2,8 @@ module github.com/stellar/stellar-galexie
 
 go 1.25.0
 
+toolchain go1.26.11
+
 require (
 	cloud.google.com/go/storage v1.56.0 // indirect
 	github.com/BurntSushi/toml v1.3.2 // indirect
