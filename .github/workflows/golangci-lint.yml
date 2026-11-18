@@ -2,7 +2,7 @@ name: Linters
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
 
 permissions:
@@ -26,8 +26,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.6
+          version: v2.11.3
           args: -v --issues-exit-code=0 --config=.golangci.yml # exit without errors for now - won't fail the build
           github-token: ${{ secrets.GITHUB_TOKEN }}
           only-new-issues: true
-        continue-on-error: true
