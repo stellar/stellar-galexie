@@ -10,6 +10,7 @@ GO_MODULES_BUILD_ARGS = --secret id=go-modules-gitconfig,src=$(GO_MODULES_GITCON
 
 docker-build:
 	$(SUDO) docker build --platform linux/amd64 --pull --label org.opencontainers.image.created="$(BUILD_DATE)" \
+    --build-arg GO_VERSION=$(shell sed -n 's/^toolchain go//p' go.mod) \
     --build-arg GOFLAGS="-ldflags=-X=github.com/stellar/stellar-galexie/internal.version=$(VERSION)" \
 $(if $(STELLAR_CORE_VERSION), --build-arg STELLAR_CORE_VERSION=$(STELLAR_CORE_VERSION)) \
 $(if $(GO_MODULES_GITCONFIG), $(GO_MODULES_BUILD_ARGS)) \
